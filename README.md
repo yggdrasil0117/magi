@@ -16,11 +16,13 @@ M2c-1 adds the non-voting Coordinator normalization boundary. It converts an unt
 
 M2c-2 adds the shared application service and sanitized `DecisionView`. Confirmation and voting are separate commands, checkpoint state can be read through a new service instance, partial ballots stay hidden, and restricted evidence is excluded from both clients and model prompts.
 
+M2c-3 adds the authenticated FastAPI transport for reading, confirming, running, and cancelling prepared decisions. Mutating commands require principal-scoped idempotency keys and all routes return `DecisionView` or a stable sanitized error envelope.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e . -i https://mirrors.aliyun.com/pypi/simple/
+.\.venv\Scripts\python.exe -m pip install -e ".[test]" -i https://mirrors.aliyun.com/pypi/simple/
 $env:PYTHONPATH = "src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ~~~
@@ -51,3 +53,4 @@ The current model-adapter increments are documented in docs/m2b1-implementation.
 docs/m2b2a-invocation-control.md, and docs/m2b2b-postgres-persistence.md.
 Coordinator normalization is documented in docs/m2c1-coordinator-normalization.md.
 The shared application boundary is documented in docs/m2c2-application-service.md.
+The initial HTTP transport is documented in docs/m2c3-fastapi-transport.md.

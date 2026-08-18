@@ -9,6 +9,11 @@
 - Return DecisionView, never DecisionRecord.
 - Use REST for commands and WebSocket for event delivery.
 
+M2c-3 requires `Authorization: Bearer ...` for every decision route and an
+`Idempotency-Key` header for `confirm`, `run`, and `cancel`. Keys are 8 through
+200 characters using letters, digits, `.`, `_`, `:`, or `-`, and are scoped by
+the authenticated principal.
+
 ## HTTP resources
 
 | Method and path | Purpose |
@@ -24,6 +29,28 @@
 | GET /v1/decisions/{id}/report | Read the final report |
 | GET /v1/decisions/{id}/events | Replay authorized public events |
 | GET /v1/decisions | List authorized decisions |
+
+M2c-3 currently implements read, confirm, run, and cancel for already prepared
+decision versions. It does not advertise unimplemented create, prepare,
+revision, list, report, event replay, or WebSocket handlers.
+
+## Error envelope
+
+Transport errors use one stable structure and never echo bearer credentials,
+request bodies, provider messages, or authorization policy detail:
+
+~~~json
+{
+  "error": {
+    "code": "decision_conflict",
+    "message": "The command conflicts with the current decision state."
+  }
+}
+~~~
+
+Current mappings include 401 authentication required, 403 access denied, 404
+decision or route not found, 409 workflow/idempotency conflict, and 422 request
+validation failure.
 
 Mutating a frozen version returns a conflict response and directs the client to create a revision.
 
@@ -74,4 +101,3 @@ Provide the same decision workflow through keyboard-first screens. Consume the A
 Provide scriptable create, prepare, confirm, run, show, report, and event-follow commands. Support stable JSON output, non-ANSI output when redirected, and distinct exit codes for completed, insufficient, degraded, and failed outcomes.
 
 No client calculates vote totals or arbitration status.
-

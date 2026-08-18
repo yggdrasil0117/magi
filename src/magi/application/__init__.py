@@ -7,12 +7,20 @@ from .service import (
     DecisionWorkflowConflict,
     DecisionWorkflowNotFound,
 )
+from .idempotency import (
+    CommandIdempotencyConflict,
+    CommandIdempotencyStore,
+    InMemoryCommandIdempotencyStore,
+)
 
 __all__ = [
     "DecisionApplicationService",
+    "CommandIdempotencyConflict",
+    "CommandIdempotencyStore",
     "DecisionGraph",
     "DecisionView",
     "DecisionViewProjector",
     "DecisionWorkflowConflict",
     "DecisionWorkflowNotFound",
+    "InMemoryCommandIdempotencyStore",
 ]

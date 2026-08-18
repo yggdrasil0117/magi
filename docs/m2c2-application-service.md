@@ -73,6 +73,7 @@ adapter may define a separate policy; there is no silent external fallback.
 
 ## Next increment
 
-M2c-3 should add the FastAPI transport adapter, command idempotency headers,
-HTTP error mapping, and initial REST tests while returning only `DecisionView`.
-Web and TUI can then be built in parallel against the same API contract.
+M2c-3 now adds the authenticated FastAPI transport, command idempotency headers,
+HTTP error mapping, and REST integration tests while returning only
+`DecisionView`. Durable API-command idempotency and production composition are
+the next server-side prerequisites before Web and TUI connect.

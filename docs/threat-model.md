@@ -43,6 +43,9 @@ Trusted only after validation:
 | User assertion promoted to fact | Seal normalized claims as user-asserted with no evidence references |
 | Restricted evidence reaches model or client | Filter it from perspective prompts and DecisionView; reject citations |
 | Client selects another checkpoint | Derive thread ID from authorized decision ID and version inside the application service |
+| Unauthenticated decision API | Require an injected bearer authenticator and per-decision authorizer; provide no allow-all default |
+| Credential or request-body reflection | Return stable sanitized errors and never include validation bodies or auth-provider detail |
+| Cross-user idempotency collision | Hash and scope command keys by authenticated principal |
 | Secret exposure | Keep credentials in the server-side gateway; never place them in prompts |
 | Duplicate run | Require idempotency keys and stage transition guards |
 | Retry counted as another vote | Reference attempts in audit; count one accepted ballot per agent and round |
