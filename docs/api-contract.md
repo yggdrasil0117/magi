@@ -116,9 +116,17 @@ Before first_ballot.completed, agent events expose status only. They must not ex
 
 Provide draft editing, upload, confirmation, live status, evidence inspection, reports, history, revision comparison, and export.
 
+M3c implements the report-only reference surface. It fetches the JSON report
+through a loopback same-origin proxy, keeps the bearer token in page memory, and
+inserts external content with DOM `textContent`. Full workflow screens remain M5.
+
 ### TUI
 
 Provide the same decision workflow through keyboard-first screens. Consume the API and WebSocket; do not import the runner.
+
+M3c implements the first terminal report command, including validated JSON output,
+plain redirected output, optional ANSI styling, and result-specific exit codes.
+The interactive Textual workflow remains M5.
 
 ### CLI
 

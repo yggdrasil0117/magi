@@ -69,6 +69,9 @@ Trusted only after validation:
 | Report invents a recommendation | Use a deterministic projector and forbid selected options on non-decisive statuses |
 | Exported rationale becomes active markup | Collapse newlines, escape Markdown controls, force attachment download, and send `nosniff` |
 | Shared cache leaks a report | Mark JSON and Markdown report responses private and no-store |
+| Model text injects terminal controls | Remove Unicode control categories before terminal layout and add only application-owned ANSI |
+| Browser report executes external text | Build DOM nodes with `textContent`; disallow inline code with CSP |
+| Browser token persists or crosses origins | Keep it in page memory and use a loopback same-origin report-only proxy |
 | Tool or agent loop | Enforce turn, tool, retry, and review limits in code |
 | Correlated model failure | Preserve independent contexts, use high-risk review, and evaluate representative cases |
 

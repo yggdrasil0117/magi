@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>MAGI Decision Report</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">THREE-PERSPECTIVE DECISION SYSTEM</p>
+          <h1>MAGI REPORT CONSOLE</h1>
+        </div>
+        <div class="signal" aria-label="System ready"><span></span> REPORT CHANNEL</div>
+      </header>
+
+      <section class="query-panel" aria-labelledby="query-title">
+        <div>
+          <p class="panel-index">01 / REPORT ACCESS</p>
+          <h2 id="query-title">读取最终决策报告</h2>
+          <p>令牌只保留在当前页面内存，不写入浏览器存储。</p>
+        </div>
+        <form id="report-form">
+          <label>
+            <span>Decision ID</span>
+            <input id="decision-id" name="decision_id" type="text" required
+              placeholder="11111111-1111-4111-8111-111111111111" autocomplete="off">
+          </label>
+          <label>
+            <span>Version</span>
+            <input id="version" name="version" type="number" min="1" value="1" required>
+          </label>
+          <label class="token-field">
+            <span>Bearer token</span>
+            <input id="token" name="token" type="password" required autocomplete="off">
+          </label>
+          <button type="submit">LOAD REPORT <span aria-hidden="true">→</span></button>
+        </form>
+      </section>
+
+      <p id="status-message" class="status-message" role="status" aria-live="polite"></p>
+      <section id="report-root" class="report-root" aria-live="polite" hidden></section>
+    </main>
+    <script type="module" src="/report.mjs"></script>
+  </body>
+</html>

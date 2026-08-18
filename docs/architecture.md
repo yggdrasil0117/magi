@@ -113,6 +113,12 @@ The Markdown renderer is deterministic application code, escapes untrusted text,
 and emits a download attachment. Transport rendering never becomes a second
 source of truth.
 
+M3c adds parallel terminal and Web report surfaces. Both are API consumers: the
+terminal validates `DecisionReport` JSON before rendering, while the browser maps
+the same fields into text-only DOM nodes. The Web development server binds to
+loopback and provides a narrow same-origin report proxy, so production CORS stays
+fail-closed. Full workflow clients remain an M5 concern.
+
 ## State machine
 
 ~~~text

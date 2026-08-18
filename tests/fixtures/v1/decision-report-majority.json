@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "decision_id": "11111111-1111-4111-8111-111111111111",
+  "version": 1,
+  "status": "majority",
+  "selected_option": "release",
+  "selected_option_label": "Release",
+  "vote_count": {
+    "release": 2,
+    "delay": 1,
+    "limited": 0
+  },
+  "ballot_count": 3,
+  "majority_rationale": [
+    "casper rationale",
+    "melchior rationale"
+  ],
+  "minority_report": {
+    "agent": "balthasar",
+    "selected_option": "delay",
+    "stance": "support",
+    "rationale_summary": [
+      "balthasar rationale"
+    ]
+  },
+  "evidence_refs": [
+    "E-001"
+  ],
+  "assumptions": [],
+  "unresolved_questions": [],
+  "risks": [],
+  "conditions": [],
+  "recommended_next_step": "Proceed with Release.",
+  "ballot_refs": [
+    "0bf0aabc-bc63-5b69-94b2-318b95e3b70b",
+    "bcd7e3f5-d03f-5f5f-a2e0-c8dce4b32a87",
+    "4da55eef-3f4c-5d81-87b3-be250c5835e2"
+  ],
+  "review_audit": [
+    {
+      "agent": "balthasar",
+      "first_ballot_id": "c3abd9fd-15c4-5504-9c3c-6180c64d79ea",
+      "final_ballot_id": "0bf0aabc-bc63-5b69-94b2-318b95e3b70b",
+      "changed": false,
+      "reason": "balthasar reviewed both peer summaries and retained the ballot."
+    },
+    {
+      "agent": "casper",
+      "first_ballot_id": "7fe88f71-7942-5bdd-ab0a-25ca78fdacce",
+      "final_ballot_id": "bcd7e3f5-d03f-5f5f-a2e0-c8dce4b32a87",
+      "changed": false,
+      "reason": "casper reviewed both peer summaries and retained the ballot."
+    },
+    {
+      "agent": "melchior",
+      "first_ballot_id": "131a04a6-02c3-520d-b85f-cfc224676f5c",
+      "final_ballot_id": "4da55eef-3f4c-5d81-87b3-be250c5835e2",
+      "changed": false,
+      "reason": "melchior reviewed both peer summaries and retained the ballot."
+    }
+  ],
+  "protocol_version": "1.0",
+  "rule_version": "1.0",
+  "generated_at": "2026-08-18T08:00:00Z"
+}

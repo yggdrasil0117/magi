@@ -36,6 +36,11 @@ authoritative JSON report or download a deterministic Markdown rendering. Both
 formats reuse decision-read authorization, disable shared caching, and expose no
 fields beyond the structured report.
 
+M3c closes M3 at version 0.3.0 with parallel terminal and Web report surfaces.
+Both read the same authenticated report endpoint and share one versioned majority
+fixture for parity acceptance. The terminal strips external control characters;
+the browser uses text-only DOM insertion and a loopback same-origin proxy.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -78,3 +83,4 @@ Coordinator-backed creation is documented in docs/m2c5-decision-preparation.md.
 M2 acceptance closure is documented in docs/m2c6-acceptance-closure.md.
 M3a reporting is documented in docs/m3a-decision-report.md.
 M3b report transport is documented in docs/m3b-report-api-export.md.
+M3 acceptance and client parity are documented in docs/m3c-client-parity-acceptance.md.

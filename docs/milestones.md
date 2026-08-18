@@ -65,7 +65,7 @@ rather than passed.
 
 ## M3: Cross-review
 
-Status: in progress at M3b (`0.3.0a2`).
+Status: implemented and locally accepted at version 0.3.0.
 
 - Produce sanitized ballot summaries.
 - Permit one revision.
@@ -82,6 +82,14 @@ does not expose a report. Dedicated report transport and client rendering remain
 M3b adds authorized JSON report retrieval and safe Markdown download. Both formats
 come from the same `DecisionReport`; incomplete decisions return a stable conflict
 instead of a partial document. Terminal and Web rendering remain for M3c.
+
+M3c adds terminal and Web report surfaces over the same report API. A shared
+versioned majority fixture proves that both preserve the selected option, vote
+count, dissent, and review audit. The terminal removes external control characters;
+the browser uses text-only DOM construction and a loopback same-origin proxy.
+
+The M3 exit criterion is satisfied: majority reports require and retain dissent,
+and every second-round ballot requires an audit reason whether retained or revised.
 
 ## M4: Evidence and audit
 
