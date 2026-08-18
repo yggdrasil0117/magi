@@ -35,7 +35,7 @@ class SequencedStructuredModel:
         return self.outputs.pop(0)
 
 
-def draft(option: str) -> BallotDraft:
+def draft(option: str, *, review: bool = False) -> BallotDraft:
     return BallotDraft(
         selected_option=option,
         stance=Stance.SUPPORT,
@@ -48,6 +48,7 @@ def draft(option: str) -> BallotDraft:
         missing_information=(),
         constraint_claims=(),
         changed_from_previous=False,
+        review_reason=("Reviewed both peer summaries and retained the ballot." if review else None),
     )
 
 
@@ -64,7 +65,7 @@ class ModelRunnerWorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
             AgentName.CASPER: "delay",
         }
         models = {
-            agent: SequencedStructuredModel((draft(option), draft(option)))
+            agent: SequencedStructuredModel((draft(option), draft(option, review=True)))
             for agent, option in choices.items()
         }
         skills_root = Path(__file__).resolve().parents[2] / "skills"

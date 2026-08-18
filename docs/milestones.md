@@ -65,12 +65,19 @@ rather than passed.
 
 ## M3: Cross-review
 
+Status: in progress at M3a (`0.3.0a1`).
+
 - Produce sanitized ballot summaries.
 - Permit one revision.
 - Force review for high-risk cases.
 - Render a structured final report.
 
 Exit criterion: every majority report preserves dissent and every revision has an audit reason.
+
+M3a makes a review reason mandatory on every second-round ballot and adds a
+deterministic structured report to terminal `DecisionView` responses. Majority
+reports preserve the arbiter's minority record verbatim; incomplete review state
+does not expose a report. Dedicated report transport and client rendering remain.
 
 ## M4: Evidence and audit
 

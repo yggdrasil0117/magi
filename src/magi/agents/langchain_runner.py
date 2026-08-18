@@ -66,6 +66,7 @@ class BallotDraft(MagiModel):
     missing_information: tuple[str, ...]
     constraint_claims: tuple[ConstraintClaimDraft, ...]
     changed_from_previous: bool
+    review_reason: str | None = Field(default=None, max_length=2000)
 
 
 class StructuredBallotModel(Protocol):
@@ -347,9 +348,11 @@ class LangChainPerspectiveRunner:
                 try:
                     output = await self._models[agent].ainvoke(messages)
                     draft, usage = self._parse_model_output(output)
-                    if round_number == 1 and draft.changed_from_previous:
+                    if round_number == 1 and (
+                        draft.changed_from_previous or draft.review_reason is not None
+                    ):
                         raise PerspectiveExecutionError(
-                            "a first-round ballot cannot report a revision"
+                            "a first-round ballot cannot report review metadata"
                         )
                     ballot = self._seal_ballot(
                         agent,
@@ -537,7 +540,11 @@ class LangChainPerspectiveRunner:
         instruction = (
             "Produce the first independent ballot. Do not infer or mention peer votes."
             if round_number == 1
-            else "Review the two sanitized peer summaries once, then retain or revise your ballot."
+            else (
+                "Review the two sanitized peer summaries once, then retain or revise your "
+                "ballot. Set review_reason to a concise audit reason that identifies the "
+                "strongest opposing point and explains why the ballot was retained or revised."
+            )
         )
         human_content = (
             instruction
@@ -597,6 +604,7 @@ class LangChainPerspectiveRunner:
             missing_information=draft.missing_information,
             constraint_claims=claims,
             changed_from_previous=draft.changed_from_previous,
+            review_reason=draft.review_reason,
             previous_ballot_id=(
                 previous_ballot.ballot_id if previous_ballot is not None else None
             ),

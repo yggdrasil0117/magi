@@ -96,6 +96,7 @@ class DecisionViewProjectorTests(unittest.TestCase):
 
         self.assertEqual(view.state, DecisionState.CROSS_REVIEW)
         self.assertEqual(len(view.ballots), 3)
+        self.assertIsNone(view.report)
 
     def test_completed_view_prefers_final_review_ballots(self) -> None:
         confirmed_case = make_case(confirmed=True)
@@ -135,6 +136,8 @@ class DecisionViewProjectorTests(unittest.TestCase):
         self.assertTrue(view.terminal)
         self.assertEqual({ballot.round for ballot in view.ballots}, {2})
         self.assertEqual(view.result, result)
+        self.assertIsNotNone(view.report)
+        self.assertEqual(view.report.selected_option, "release")
 
     def test_mismatched_checkpoint_evidence_is_rejected(self) -> None:
         state = self.state()

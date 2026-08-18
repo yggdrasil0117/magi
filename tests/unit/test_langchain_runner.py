@@ -66,6 +66,7 @@ def make_draft(
     *,
     changed: bool = False,
     evidence_refs: tuple[str, ...] = ("E-001",),
+    review_reason: str | None = None,
 ) -> BallotDraft:
     return BallotDraft(
         selected_option=selected_option,
@@ -79,6 +80,11 @@ def make_draft(
         missing_information=(),
         constraint_claims=(),
         changed_from_previous=changed,
+        review_reason=(
+            review_reason
+            if review_reason is not None
+            else ("Peer evidence changed the recommendation." if changed else None)
+        ),
     )
 
 
@@ -231,10 +237,35 @@ class LangChainPerspectiveRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ballot.round, 2)
         self.assertEqual(ballot.previous_ballot_id, previous.ballot_id)
         self.assertTrue(ballot.changed_from_previous)
+        self.assertEqual(ballot.review_reason, "Peer evidence changed the recommendation.")
         human_prompt = models[AgentName.MELCHIOR].inputs[0][1][1]
         self.assertIn('"peer_summaries"', human_prompt)
         for peer in peer_ballots:
             self.assertNotIn(str(peer.ballot_id), human_prompt)
+
+    async def test_review_requires_an_audit_reason_from_the_model(self) -> None:
+        case = make_case()
+        snapshot = make_snapshot(case)
+        previous = make_ballot(case, AgentName.MELCHIOR, "release")
+        peers = tuple(
+            PeerBallotSummary.from_ballot(
+                make_ballot(case, agent, option)
+            )
+            for agent, option in (
+                (AgentName.BALTHASAR, "delay"),
+                (AgentName.CASPER, "limited"),
+            )
+        )
+        runner, _ = self.make_runner(make_draft())
+
+        with self.assertRaisesRegex(PerspectiveExecutionError, "invalid ballot draft"):
+            await runner.review_ballot(
+                AgentName.MELCHIOR,
+                case,
+                snapshot,
+                previous,
+                peers,
+            )
 
     async def test_invocation_error_is_wrapped_without_provider_message(self) -> None:
         case = make_case()

@@ -65,6 +65,8 @@ Trusted only after validation:
 | Cross-process duplicate model call | Serialize each idempotency key with a PostgreSQL advisory lock |
 | Invocation/checkpoint database exposure | Restrict database credentials, network access, and application roles |
 | Presenter changes result | Generate from ArbitrationResult and validate invariant fields |
+| Review rationale is lost or rewritten | Require a reason on every second-round ballot and project it verbatim into immutable review audit links |
+| Report invents a recommendation | Use a deterministic projector and forbid selected options on non-decisive statuses |
 | Tool or agent loop | Enforce turn, tool, retry, and review limits in code |
 | Correlated model failure | Preserve independent contexts, use high-risk review, and evaluate representative cases |
 

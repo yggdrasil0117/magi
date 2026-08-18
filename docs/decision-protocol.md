@@ -59,6 +59,9 @@ Provide each agent only sanitized summaries of the other two ballots:
 
 Ask each agent to identify the strongest opposing point, the weakest unsupported point, and whether its own ballot should change. Permit one revision only. Do not create open-ended agent conversation or recursive delegation.
 
+Every second-round ballot must reference its first-round ballot and state a concise
+review reason, including when the perspective retains its original vote.
+
 ## Final arbitration
 
 | Final result | Status |
@@ -89,4 +92,3 @@ Every completed report must include:
 - protocol and rule versions.
 
 The presenter must not turn a conditional or unresolved result into a definitive recommendation.
-

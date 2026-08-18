@@ -18,6 +18,8 @@ from magi.domain import (
 )
 from magi.domain.models import MagiModel
 
+from .reporting import DecisionReport, DecisionReportProjector
+
 
 class DecisionView(MagiModel):
     """Sanitized source of truth returned to Web, TUI, and CLI clients."""
@@ -30,6 +32,7 @@ class DecisionView(MagiModel):
     evidence: tuple[EvidenceItem, ...] = ()
     ballots: tuple[Ballot, ...] = ()
     result: ArbitrationResult | None = None
+    report: DecisionReport | None = None
     awaiting_confirmation: bool = False
     awaiting_run: bool = False
     terminal: bool = False
@@ -39,12 +42,17 @@ class DecisionView(MagiModel):
 class DecisionViewProjector:
     """Project checkpoint state without leaking partial votes or restricted evidence."""
 
+    def __init__(self, report_projector: DecisionReportProjector | None = None) -> None:
+        self._report_projector = report_projector or DecisionReportProjector()
+
     def project(self, state: dict[str, Any]) -> DecisionView:
         if "case" not in state:
             raise ProtocolViolation("decision checkpoint does not contain a case")
         case = DecisionCase.model_validate(state["case"])
         snapshot = self._snapshot(state, case)
         result = self._result(state, case)
+        ballots = self._released_ballots(state)
+        report = self._report(state, case, result, ballots)
         decision_state = self._decision_state(state, result)
         awaiting_confirmation = decision_state is DecisionState.WAITING_FOR_USER
         awaiting_run = decision_state is DecisionState.EVIDENCE_READY
@@ -61,8 +69,9 @@ class DecisionViewProjector:
             state=decision_state,
             case=case,
             evidence=self._public_evidence(snapshot),
-            ballots=self._released_ballots(state),
+            ballots=ballots,
             result=result,
+            report=report,
             awaiting_confirmation=awaiting_confirmation,
             awaiting_run=awaiting_run,
             terminal=terminal,
@@ -70,6 +79,25 @@ class DecisionViewProjector:
                 awaiting_confirmation,
                 awaiting_run,
             ),
+        )
+
+    def _report(
+        self,
+        state: dict[str, Any],
+        case: DecisionCase,
+        result: ArbitrationResult | None,
+        final_ballots: tuple[Ballot, ...],
+    ) -> DecisionReport | None:
+        if result is None:
+            return None
+        first_ballots = tuple(
+            Ballot.model_validate(payload) for payload in state.get("first_ballots", ())
+        )
+        return self._report_projector.project(
+            case,
+            result,
+            first_ballots,
+            final_ballots,
         )
 
     @staticmethod

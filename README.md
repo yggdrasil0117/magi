@@ -26,6 +26,11 @@ M2c-5 adds authenticated, idempotent decision creation. The non-voting Coordinat
 
 M2c-6 closes M2 at version 0.2.0 with a bounded PostgreSQL-aware readiness probe, an explicitly enabled real-service acceptance flow, and a frozen acceptance matrix. Local implementation acceptance passes; deployment smoke remains environment-gated.
 
+M3a starts cross-review reporting at version 0.3.0a1. Every second-round ballot
+now records why it was retained or revised, and terminal `DecisionView` records
+include a deterministic structured report that preserves majority rationale and
+minority dissent without another model call.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -66,3 +71,4 @@ Durable API command idempotency is documented in docs/m2c4a-postgres-command-ide
 Production composition is documented in docs/m2c4b-production-composition.md.
 Coordinator-backed creation is documented in docs/m2c5-decision-preparation.md.
 M2 acceptance closure is documented in docs/m2c6-acceptance-closure.md.
+M3a reporting is documented in docs/m3a-decision-report.md.

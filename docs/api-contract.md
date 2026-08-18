@@ -39,6 +39,10 @@ items. It returns a `DecisionView` paused at user confirmation. Editable drafts
 and the separate prepare route remain unimplemented, as do revision, list,
 report, event replay, and WebSocket handlers.
 
+M3a embeds a structured `report` in terminal `DecisionView` responses. The
+dedicated `GET /report` convenience route remains unimplemented; clients can
+already render the authoritative report from the shared decision resource.
+
 Decision creation requires the explicit `decision:create` permission. The
 server derives a stable decision ID from the authenticated principal and
 idempotency key so a retry after partial persistence returns to the same

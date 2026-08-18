@@ -1,7 +1,7 @@
 # MAGI Architecture
 
 Status: accepted  
-Architecture version: 0.2  
+Architecture version: 0.3
 Decision protocol version: 1.0
 
 ## Purpose
@@ -102,6 +102,11 @@ Build DecisionView from stored records. Optional language polishing cannot chang
 M2c-2 implements the first deterministic `DecisionView` projector. It releases no
 partial first-round ballots, switches to review ballots only after arbitration,
 and excludes restricted evidence. Language polishing remains deferred.
+
+M3a adds an immutable `DecisionReport` projection to terminal `DecisionView`
+records. It derives majority rationale, dissent, evidence references, assumptions,
+risks, unresolved questions, next steps, and review audit links only from sealed
+records. It performs no model call and cannot alter arbitration.
 
 ## State machine
 

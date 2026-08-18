@@ -1,6 +1,7 @@
 """Use cases and client-safe projections for MAGI interfaces."""
 
 from .models import DecisionView, DecisionViewProjector
+from .reporting import DecisionReport, DecisionReportProjector, ReviewAudit
 from .service import (
     DecisionApplicationService,
     DecisionGraph,
@@ -25,10 +26,13 @@ __all__ = [
     "DecisionGraph",
     "DecisionPreparationFailed",
     "DecisionPreparationRequest",
+    "DecisionReport",
+    "DecisionReportProjector",
     "DecisionView",
     "DecisionViewProjector",
     "DecisionWorkflowConflict",
     "DecisionWorkflowNotFound",
     "InMemoryCommandIdempotencyStore",
+    "ReviewAudit",
     "SuppliedEvidence",
 ]

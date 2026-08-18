@@ -180,6 +180,7 @@ class Ballot(MagiModel):
     constraint_claims: tuple[ConstraintClaim, ...] = ()
     changed_from_previous: bool = False
     previous_ballot_id: UUID | None = None
+    review_reason: str | None = Field(default=None, max_length=2000)
     created_at: datetime = Field(default_factory=utc_now)
 
     @model_validator(mode="after")
@@ -190,10 +191,17 @@ class Ballot(MagiModel):
             raise ValueError("an abstention cannot select an option")
         if self.stance is not Stance.ABSTAIN and self.selected_option is None:
             raise ValueError("a non-abstaining ballot must select an option")
-        if self.round == 1 and (self.changed_from_previous or self.previous_ballot_id is not None):
-            raise ValueError("a first-round ballot cannot reference or change a previous ballot")
-        if self.round == 2 and self.previous_ballot_id is None:
-            raise ValueError("a second-round ballot must reference its first-round ballot")
+        if self.round == 1 and (
+            self.changed_from_previous
+            or self.previous_ballot_id is not None
+            or self.review_reason is not None
+        ):
+            raise ValueError("a first-round ballot cannot contain review metadata")
+        if self.round == 2:
+            if self.previous_ballot_id is None:
+                raise ValueError("a second-round ballot must reference its first-round ballot")
+            if not self.review_reason:
+                raise ValueError("a second-round ballot requires an audit reason")
         return self
 
 

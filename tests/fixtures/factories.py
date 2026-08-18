@@ -98,8 +98,12 @@ def make_ballot(
     missing_information: tuple[str, ...] = (),
     confidence: float = 0.7,
     evidence_refs: tuple[str, ...] = ("E-001",),
+    rationale_summary: tuple[str, ...] | None = None,
+    assumptions: tuple[str, ...] = (),
+    risks: tuple[str, ...] = (),
     changed: bool = False,
     previous_ballot_id: UUID | None = None,
+    review_reason: str | None = None,
 ) -> Ballot:
     previous_id = None
     if round_number == 2:
@@ -114,11 +118,22 @@ def make_ballot(
         stance=stance,
         confidence=confidence,
         evidence_quality=EvidenceQuality.MEDIUM,
-        rationale_summary=(f"{agent.value} rationale",),
+        rationale_summary=rationale_summary or (f"{agent.value} rationale",),
         evidence_refs=evidence_refs,
+        assumptions=assumptions,
+        risks=risks,
         missing_information=missing_information,
         constraint_claims=claims,
         changed_from_previous=changed,
         previous_ballot_id=previous_id,
+        review_reason=(
+            review_reason
+            if review_reason is not None
+            else (
+                "Reviewed both peer summaries and retained the ballot."
+                if round_number == 2
+                else None
+            )
+        ),
         created_at=TIMESTAMP,
     )
