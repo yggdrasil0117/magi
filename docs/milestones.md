@@ -20,7 +20,7 @@ Exit criterion: all arbitration outcomes are reproducible from fixtures.
 
 ## M2: Three perspectives
 
-Status: M2a through M2b-2b implemented and locally verified.
+Status: M2a through M2c-1 implemented and locally verified.
 
 - Add LangGraph Graph API orchestration and PostgreSQL checkpointing.
 - Implement Coordinator.
@@ -39,6 +39,9 @@ M2b-2b adds the PostgreSQL invocation ledger, cross-process advisory locking,
 canonical ballot storage, and `AsyncPostgresSaver` checkpointing. The real
 database restart test is available and runs when `MAGI_TEST_POSTGRES_DSN` is set;
 the current workstation has no local PostgreSQL service, so that test is skipped.
+M2c-1 adds the non-voting Coordinator model boundary and seals every field that
+must remain under application authority. It deliberately does not add a fourth
+persona or expose the perspective agents before user confirmation.
 
 ## M3: Cross-review
 

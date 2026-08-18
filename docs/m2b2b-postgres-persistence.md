@@ -70,4 +70,5 @@ MAGI_TEST_POSTGRES_DSN=postgresql://magi:<password>@127.0.0.1:5432/magi
 
 Run the restart integration test against a disposable PostgreSQL instance before
 enabling multiple production application processes. Then perform the controlled
-live-model evaluation described in M2b-2a.
+live-model evaluation described in M2b-2a. Coordinator normalization is now
+implemented in M2c-1; the shared application service and API remain next.

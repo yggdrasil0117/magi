@@ -38,6 +38,8 @@ Trusted only after validation:
 | Evidence replacement | Store content hash and immutable snapshot version |
 | Sensitive data in logs | Classify and redact before logging or client projection |
 | Model prompt copied into telemetry | Store a SHA-256 prompt digest, not raw prompt content |
+| Coordinator overwrites authoritative input | Seal raw question, ID, version, classification, and risk floor in application code |
+| User assertion promoted to fact | Seal normalized claims as user-asserted with no evidence references |
 | Secret exposure | Keep credentials in the server-side gateway; never place them in prompts |
 | Duplicate run | Require idempotency keys and stage transition guards |
 | Retry counted as another vote | Reference attempts in audit; count one accepted ballot per agent and round |
