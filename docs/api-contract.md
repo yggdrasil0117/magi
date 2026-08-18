@@ -29,6 +29,7 @@ scoped by the authenticated principal.
 | POST /v1/decisions/{id}/cancel | Cancel unfinished work |
 | POST /v1/decisions/{id}/revisions | Create a new version |
 | GET /v1/decisions/{id}/report | Read the final report |
+| GET /v1/decisions/{id}/report.md | Download the final report as Markdown |
 | GET /v1/decisions/{id}/events | Replay authorized public events |
 | GET /v1/decisions | List authorized decisions |
 
@@ -39,9 +40,12 @@ items. It returns a `DecisionView` paused at user confirmation. Editable drafts
 and the separate prepare route remain unimplemented, as do revision, list,
 report, event replay, and WebSocket handlers.
 
-M3a embeds a structured `report` in terminal `DecisionView` responses. The
-dedicated `GET /report` convenience route remains unimplemented; clients can
-already render the authoritative report from the shared decision resource.
+M3a embeds a structured `report` in terminal `DecisionView` responses. M3b adds
+the dedicated JSON report route and a deterministic Markdown attachment. Both
+reuse `decision:read` authorization because they expose the same report fields,
+return `report_not_ready` until arbitration completes, and set private no-store
+cache controls. Report routes do not accept idempotency keys because they are
+read-only.
 
 Decision creation requires the explicit `decision:create` permission. The
 server derives a stable decision ID from the authenticated principal and

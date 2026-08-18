@@ -108,6 +108,11 @@ records. It derives majority rationale, dissent, evidence references, assumption
 risks, unresolved questions, next steps, and review audit links only from sealed
 records. It performs no model call and cannot alter arbitration.
 
+M3b publishes that same report through authenticated JSON and Markdown resources.
+The Markdown renderer is deterministic application code, escapes untrusted text,
+and emits a download attachment. Transport rendering never becomes a second
+source of truth.
+
 ## State machine
 
 ~~~text

@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Annotated, Protocol
 from uuid import UUID, uuid5
 
-from fastapi import Depends, FastAPI, Header, Query, Request
+from fastapi import Depends, FastAPI, Header, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -20,6 +20,9 @@ from magi.application import (
     CommandIdempotencyStore,
     DecisionPreparationFailed,
     DecisionPreparationRequest,
+    DecisionReport,
+    DecisionReportMarkdownRenderer,
+    DecisionReportNotReady,
     DecisionView,
     DecisionWorkflowConflict,
     DecisionWorkflowNotFound,
@@ -46,6 +49,10 @@ from .models import (
 
 IDEMPOTENCY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$"
 CREATION_NAMESPACE = UUID("7d064bfc-7ab6-4e37-a7ad-94d92b967a23")
+
+
+class MarkdownResponse(Response):
+    media_type = "text/markdown"
 
 
 class DecisionApiService(Protocol):
@@ -173,6 +180,17 @@ def create_app(
             "The command conflicts with the current decision state.",
         )
 
+    @app.exception_handler(DecisionReportNotReady)
+    async def report_not_ready(
+        request: Request,
+        exc: DecisionReportNotReady,
+    ) -> JSONResponse:
+        return _error_response(
+            409,
+            "report_not_ready",
+            "The decision does not have a final report yet.",
+        )
+
     @app.exception_handler(CommandIdempotencyConflict)
     async def command_conflict(
         request: Request,
@@ -281,6 +299,51 @@ def create_app(
     ) -> DecisionView:
         await authorizer.authorize(principal, decision_id, "decision:read")
         return await service.get(decision_id, version)
+
+    async def load_report(
+        decision_id: UUID,
+        version: int,
+        principal: ApiPrincipal,
+    ) -> DecisionReport:
+        await authorizer.authorize(principal, decision_id, "decision:read")
+        view = await service.get(decision_id, version)
+        if view.report is None:
+            raise DecisionReportNotReady("the decision report is not available")
+        return view.report
+
+    @app.get(
+        "/v1/decisions/{decision_id}/report",
+        response_model=DecisionReport,
+        responses=_error_models(401, 403, 404, 409, 422),
+    )
+    async def get_decision_report(
+        decision_id: UUID,
+        response: Response,
+        principal: PrincipalDependency,
+        version: Annotated[int, Query(ge=1)] = 1,
+    ) -> DecisionReport:
+        response.headers.update(_private_report_headers())
+        return await load_report(decision_id, version, principal)
+
+    @app.get(
+        "/v1/decisions/{decision_id}/report.md",
+        response_class=MarkdownResponse,
+        responses=_error_models(401, 403, 404, 409, 422),
+    )
+    async def download_decision_report(
+        decision_id: UUID,
+        principal: PrincipalDependency,
+        version: Annotated[int, Query(ge=1)] = 1,
+    ) -> MarkdownResponse:
+        report = await load_report(decision_id, version, principal)
+        headers = _private_report_headers()
+        headers["Content-Disposition"] = (
+            f'attachment; filename="magi-{decision_id}-v{version}.md"'
+        )
+        return MarkdownResponse(
+            DecisionReportMarkdownRenderer().render(report),
+            headers=headers,
+        )
 
     @app.post(
         "/v1/decisions/{decision_id}/confirm",
@@ -418,4 +481,11 @@ def _error_models(*status_codes: int) -> dict[int, dict[str, object]]:
     return {
         status_code: {"model": ApiErrorResponse}
         for status_code in status_codes
+    }
+
+
+def _private_report_headers() -> dict[str, str]:
+    return {
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
     }

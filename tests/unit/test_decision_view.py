@@ -5,6 +5,8 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
+from pydantic import ValidationError
+
 from magi.arbitration import DeterministicArbiter
 from magi.application import DecisionViewProjector
 from magi.domain import (
@@ -147,6 +149,37 @@ class DecisionViewProjectorTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ProtocolViolation, "evidence"):
             self.projector.project(state)
+
+    def test_serialized_view_rejects_a_report_that_changes_the_result(self) -> None:
+        confirmed_case = make_case(confirmed=True)
+        snapshot = make_snapshot(confirmed_case)
+        ballots = tuple(
+            make_ballot(confirmed_case, agent, "release") for agent in AgentName
+        )
+        result = DeterministicArbiter().arbitrate(
+            confirmed_case,
+            snapshot,
+            ballots,
+            (),
+        )
+        view = self.projector.project(
+            {
+                "case": confirmed_case.model_dump(mode="json"),
+                "snapshot": snapshot.model_dump(mode="json"),
+                "first_ballots": [
+                    ballot.model_dump(mode="json") for ballot in ballots
+                ],
+                "result": result.model_dump(mode="json"),
+                "phase": "completed",
+            }
+        )
+        payload = view.model_dump(mode="json")
+        payload["report"]["status"] = "unresolved"
+        payload["report"]["selected_option"] = None
+        payload["report"]["selected_option_label"] = None
+
+        with self.assertRaisesRegex(ValidationError, "arbitration result"):
+            type(view).model_validate(payload)
 
 
 if __name__ == "__main__":

@@ -31,6 +31,11 @@ now records why it was retained or revised, and terminal `DecisionView` records
 include a deterministic structured report that preserves majority rationale and
 minority dissent without another model call.
 
+M3b adds authenticated report resources at version 0.3.0a2. Clients can read the
+authoritative JSON report or download a deterministic Markdown rendering. Both
+formats reuse decision-read authorization, disable shared caching, and expose no
+fields beyond the structured report.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -72,3 +77,4 @@ Production composition is documented in docs/m2c4b-production-composition.md.
 Coordinator-backed creation is documented in docs/m2c5-decision-preparation.md.
 M2 acceptance closure is documented in docs/m2c6-acceptance-closure.md.
 M3a reporting is documented in docs/m3a-decision-report.md.
+M3b report transport is documented in docs/m3b-report-api-export.md.

@@ -31,6 +31,10 @@ class ReviewAudit(MagiModel):
     reason: str = Field(min_length=1, max_length=2000)
 
 
+class DecisionReportNotReady(RuntimeError):
+    """Raised when a decision has no terminal report to publish."""
+
+
 class DecisionReport(MagiModel):
     """Immutable report rendered without another model or mutable vote fields."""
 
@@ -213,3 +217,122 @@ class DecisionReportProjector:
 
 def _unique(values: Iterable[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(value for value in values if value))
+
+
+class DecisionReportMarkdownRenderer:
+    """Render a stable, download-safe Markdown view of a structured report."""
+
+    def render(self, report: DecisionReport) -> str:
+        selected = "None"
+        if report.selected_option is not None:
+            selected = (
+                f"{_markdown_text(report.selected_option_label or report.selected_option)} "
+                f"(`{report.selected_option}`)"
+            )
+        lines = [
+            "# MAGI Decision Report",
+            "",
+            f"- Decision ID: `{report.decision_id}`",
+            f"- Version: `{report.version}`",
+            f"- Status: `{report.status.value}`",
+            f"- Selected option: {selected}",
+            f"- Ballot count: `{report.ballot_count}`",
+            f"- Protocol version: `{report.protocol_version}`",
+            f"- Rule version: `{report.rule_version}`",
+            f"- Generated at: `{report.generated_at.isoformat()}`",
+            "",
+            "## Vote count",
+            "",
+        ]
+        lines.extend(
+            f"- `{option}`: `{count}`"
+            for option, count in sorted(report.vote_count.items())
+        )
+        self._append_items(lines, "Majority rationale", report.majority_rationale)
+        self._append_minority(lines, report.minority_report)
+        self._append_items(lines, "Evidence references", report.evidence_refs, code=True)
+        self._append_items(lines, "Assumptions", report.assumptions)
+        self._append_items(lines, "Unresolved questions", report.unresolved_questions)
+        self._append_items(lines, "Risks", report.risks)
+        self._append_items(lines, "Conditions", report.conditions)
+        lines.extend(
+            (
+                "",
+                "## Recommended next step",
+                "",
+                _markdown_text(report.recommended_next_step),
+            )
+        )
+        self._append_review_audit(lines, report.review_audit)
+        return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def _append_items(
+        lines: list[str],
+        title: str,
+        items: tuple[str, ...],
+        *,
+        code: bool = False,
+    ) -> None:
+        lines.extend(("", f"## {title}", ""))
+        if not items:
+            lines.append("- None.")
+            return
+        lines.extend(
+            f"- `{_code_text(item)}`" if code else f"- {_markdown_text(item)}"
+            for item in items
+        )
+
+    @staticmethod
+    def _append_minority(
+        lines: list[str],
+        minority: MinorityReport | None,
+    ) -> None:
+        lines.extend(("", "## Minority report", ""))
+        if minority is None:
+            lines.append("- None.")
+            return
+        selected = minority.selected_option or "none"
+        lines.extend(
+            (
+                f"- Agent: `{minority.agent.value}`",
+                f"- Selected option: `{_code_text(selected)}`",
+                f"- Stance: `{minority.stance.value}`",
+                "- Rationale:",
+            )
+        )
+        lines.extend(
+            f"  - {_markdown_text(item)}" for item in minority.rationale_summary
+        )
+
+    @staticmethod
+    def _append_review_audit(
+        lines: list[str],
+        audit: tuple[ReviewAudit, ...],
+    ) -> None:
+        lines.extend(("", "## Review audit", ""))
+        if not audit:
+            lines.append("- No cross-review was required.")
+            return
+        for item in audit:
+            action = "revised" if item.changed else "retained"
+            lines.extend(
+                (
+                    f"- **{item.agent.value}** — {action}",
+                    f"  - First ballot: `{item.first_ballot_id}`",
+                    f"  - Final ballot: `{item.final_ballot_id}`",
+                    f"  - Reason: {_markdown_text(item.reason)}",
+                )
+            )
+
+
+def _markdown_text(value: str) -> str:
+    normalized = " ".join(value.split())
+    escaped = normalized.replace("\\", "\\\\")
+    for character in ("`", "*", "_", "[", "]", "<", ">", "|"):
+        escaped = escaped.replace(character, f"\\{character}")
+    return escaped
+
+
+def _code_text(value: str) -> str:
+    return " ".join(value.split()).replace("`", "\\`")

@@ -15,6 +15,7 @@ from magi.api import (
     ApiPrincipal,
     create_app,
 )
+from magi.arbitration import DeterministicArbiter
 from magi.application import (
     DecisionApplicationService,
     DecisionPreparationFailed,
@@ -149,6 +150,27 @@ class FastApiAdapterTests(unittest.TestCase):
             "Idempotency-Key": key,
         }
 
+    def set_completed_view(self) -> DecisionView:
+        case = make_case(confirmed=True)
+        snapshot = make_snapshot(case)
+        ballots = tuple(
+            make_ballot(case, agent, "release") for agent in AgentName
+        )
+        result = DeterministicArbiter().arbitrate(case, snapshot, ballots)
+        self.service.view = DecisionViewProjector().project(
+            {
+                "case": case.model_dump(mode="json"),
+                "snapshot": snapshot.model_dump(mode="json"),
+                "first_ballots": [
+                    ballot.model_dump(mode="json") for ballot in ballots
+                ],
+                "review_ballots": [],
+                "result": result.model_dump(mode="json"),
+                "phase": "completed",
+            }
+        )
+        return self.service.view
+
     def test_health_does_not_require_authentication(self) -> None:
         response = self.client.get("/healthz")
         self.assertEqual(response.status_code, 200)
@@ -211,6 +233,45 @@ class FastApiAdapterTests(unittest.TestCase):
             self.authorizer.authorizations[-1],
             ("user-1", DECISION_ID, "decision:read"),
         )
+
+    def test_report_requires_authentication_and_terminal_result(self) -> None:
+        unauthenticated = self.client.get(self.path("report"))
+        self.assertEqual(unauthenticated.status_code, 401)
+
+        pending = self.client.get(self.path("report"), headers=self.auth)
+        self.assertEqual(pending.status_code, 409)
+        self.assertEqual(pending.json()["error"]["code"], "report_not_ready")
+
+        self.authorizer.denied_actions.add("decision:read")
+        denied = self.client.get(self.path("report"), headers=self.auth)
+        self.assertEqual(denied.status_code, 403)
+
+    def test_report_route_returns_authoritative_json_with_private_headers(self) -> None:
+        view = self.set_completed_view()
+
+        response = self.client.get(
+            self.path("report") + "?version=1",
+            headers=self.auth,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), view.report.model_dump(mode="json"))
+        self.assertEqual(response.headers["cache-control"], "private, no-store")
+        self.assertEqual(response.headers["x-content-type-options"], "nosniff")
+        self.assertEqual(self.service.calls[-1], ("get", DECISION_ID, 1, None))
+
+    def test_markdown_report_route_returns_a_safe_attachment(self) -> None:
+        self.set_completed_view()
+
+        response = self.client.get(self.path("report.md"), headers=self.auth)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.headers["content-type"].startswith("text/markdown"))
+        self.assertIn("attachment;", response.headers["content-disposition"])
+        self.assertIn(str(DECISION_ID), response.headers["content-disposition"])
+        self.assertEqual(response.headers["cache-control"], "private, no-store")
+        self.assertIn("# MAGI Decision Report", response.text)
+        self.assertIn("- Status: `consensus`", response.text)
 
     def test_create_prepares_once_and_returns_confirmation_gate(self) -> None:
         body = {
@@ -389,9 +450,18 @@ class FastApiAdapterTests(unittest.TestCase):
     def test_openapi_declares_bearer_security(self) -> None:
         response = self.client.get("/openapi.json")
         self.assertEqual(response.status_code, 200)
-        security_schemes = response.json()["components"]["securitySchemes"]
+        document = response.json()
+        security_schemes = document["components"]["securitySchemes"]
         self.assertEqual(security_schemes["HTTPBearer"]["type"], "http")
         self.assertEqual(security_schemes["HTTPBearer"]["scheme"], "bearer")
+        report_path = f"/v1/decisions/{{decision_id}}/report"
+        markdown_path = f"/v1/decisions/{{decision_id}}/report.md"
+        self.assertIn(report_path, document["paths"])
+        self.assertIn(markdown_path, document["paths"])
+        report_schema = document["paths"][report_path]["get"]["responses"]["200"]
+        self.assertIn("application/json", report_schema["content"])
+        markdown_schema = document["paths"][markdown_path]["get"]["responses"]["200"]
+        self.assertIn("text/markdown", markdown_schema["content"])
 
 
 class FastApiApplicationStackTests(unittest.TestCase):
@@ -439,6 +509,14 @@ class FastApiApplicationStackTests(unittest.TestCase):
         self.assertEqual(completed.json()["state"], "completed")
         self.assertEqual(completed.json()["result"]["winning_option"], "release")
         self.assertEqual(len(runner.calls), 3)
+
+        report = client.get(
+            base_path + "/report",
+            headers={"Authorization": "Bearer token-user-1"},
+        )
+        self.assertEqual(report.status_code, 200)
+        self.assertEqual(report.json()["selected_option"], "release")
+        self.assertEqual(report.json()["status"], "consensus")
 
 
 if __name__ == "__main__":

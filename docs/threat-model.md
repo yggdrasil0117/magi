@@ -67,6 +67,8 @@ Trusted only after validation:
 | Presenter changes result | Generate from ArbitrationResult and validate invariant fields |
 | Review rationale is lost or rewritten | Require a reason on every second-round ballot and project it verbatim into immutable review audit links |
 | Report invents a recommendation | Use a deterministic projector and forbid selected options on non-decisive statuses |
+| Exported rationale becomes active markup | Collapse newlines, escape Markdown controls, force attachment download, and send `nosniff` |
+| Shared cache leaks a report | Mark JSON and Markdown report responses private and no-store |
 | Tool or agent loop | Enforce turn, tool, retry, and review limits in code |
 | Correlated model failure | Preserve independent contexts, use high-risk review, and evaluate representative cases |
 

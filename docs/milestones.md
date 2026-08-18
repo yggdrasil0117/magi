@@ -65,7 +65,7 @@ rather than passed.
 
 ## M3: Cross-review
 
-Status: in progress at M3a (`0.3.0a1`).
+Status: in progress at M3b (`0.3.0a2`).
 
 - Produce sanitized ballot summaries.
 - Permit one revision.
@@ -78,6 +78,10 @@ M3a makes a review reason mandatory on every second-round ballot and adds a
 deterministic structured report to terminal `DecisionView` responses. Majority
 reports preserve the arbiter's minority record verbatim; incomplete review state
 does not expose a report. Dedicated report transport and client rendering remain.
+
+M3b adds authorized JSON report retrieval and safe Markdown download. Both formats
+come from the same `DecisionReport`; incomplete decisions return a stable conflict
+instead of a partial document. Terminal and Web rendering remain for M3c.
 
 ## M4: Evidence and audit
 

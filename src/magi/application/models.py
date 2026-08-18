@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any, Literal
 from uuid import UUID
 
+from pydantic import model_validator
+
 from magi.domain import (
     ArbitrationResult,
     ArbitrationStatus,
@@ -37,6 +39,31 @@ class DecisionView(MagiModel):
     awaiting_run: bool = False
     terminal: bool = False
     available_actions: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_authoritative_records(self) -> DecisionView:
+        identity = (self.decision_id, self.version)
+        if (self.case.decision_id, self.case.version) != identity:
+            raise ValueError("DecisionView case identity does not match the view")
+        if self.result is not None and (
+            self.result.decision_id,
+            self.result.decision_version,
+        ) != identity:
+            raise ValueError("DecisionView result identity does not match the view")
+        if self.report is None:
+            return self
+        if (self.report.decision_id, self.report.version) != identity:
+            raise ValueError("DecisionView report identity does not match the view")
+        if self.result is None:
+            raise ValueError("DecisionView cannot publish a report without a result")
+        if (
+            self.report.status != self.result.status
+            or self.report.selected_option != self.result.winning_option
+            or self.report.vote_count != self.result.vote_count
+            or set(self.report.ballot_refs) != set(self.result.ballot_refs)
+        ):
+            raise ValueError("DecisionView report does not match its arbitration result")
+        return self
 
 
 class DecisionViewProjector:
