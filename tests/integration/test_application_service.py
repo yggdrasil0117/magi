@@ -2,21 +2,57 @@
 
 from __future__ import annotations
 
+import hashlib
 import unittest
+from collections.abc import Callable
 from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from langgraph.checkpoint.memory import InMemorySaver
 
-from magi.agents import ScriptedPerspectiveRunner
+from magi.agents import (
+    CoordinatorExecutionError,
+    NormalizationRequest,
+    ScriptedPerspectiveRunner,
+)
 from magi.application import (
     DecisionApplicationService,
+    DecisionPreparationFailed,
+    DecisionPreparationRequest,
     DecisionWorkflowConflict,
     DecisionWorkflowNotFound,
+    SuppliedEvidence,
 )
-from magi.domain import AgentName, ArbitrationStatus, DecisionState
+from magi.domain import (
+    AgentName,
+    ArbitrationStatus,
+    DataClassification,
+    DecisionCase,
+    DecisionState,
+    VerificationStatus,
+)
 from magi.orchestration import build_langgraph_workflow
 from tests.fixtures.factories import make_ballot, make_case, make_snapshot
+
+
+class FakeNormalizer:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.requests: list[NormalizationRequest] = []
+
+    async def normalize(self, request: NormalizationRequest) -> DecisionCase:
+        self.requests.append(request)
+        if self.error is not None:
+            raise self.error
+        return make_case(confirmed=False).model_copy(
+            update={
+                "decision_id": request.decision_id,
+                "version": request.version,
+                "raw_question": request.raw_question,
+                "data_classification": request.data_classification,
+                "risk_level": request.minimum_risk_level,
+            }
+        )
 
 
 class DecisionApplicationServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -31,6 +67,28 @@ class DecisionApplicationServiceTests(unittest.IsolatedAsyncioTestCase):
         selected_saver = saver or InMemorySaver()
         graph = build_langgraph_workflow(runner, checkpointer=selected_saver)
         return DecisionApplicationService(graph), runner, selected_saver
+
+    def build_preparation_service(
+        self,
+        normalizer: FakeNormalizer,
+        *,
+        clock: Callable[[], datetime] | None = None,
+    ) -> tuple[DecisionApplicationService, ScriptedPerspectiveRunner]:
+        case = make_case(confirmed=False)
+        runner = ScriptedPerspectiveRunner(
+            {agent: make_ballot(case, agent, "release") for agent in AgentName}
+        )
+        graph = build_langgraph_workflow(runner, checkpointer=InMemorySaver())
+        if clock is None:
+            return DecisionApplicationService(graph, normalizer=normalizer), runner
+        return (
+            DecisionApplicationService(
+                graph,
+                normalizer=normalizer,
+                clock=clock,
+            ),
+            runner,
+        )
 
     async def test_new_service_instance_reads_and_resumes_confirmation(self) -> None:
         case = make_case(confirmed=False)
@@ -132,6 +190,93 @@ class DecisionApplicationServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaisesRegex(DecisionWorkflowConflict, "different"):
             await service.wait_for_confirmation(case, changed_snapshot)
+
+    async def test_prepare_seals_identity_evidence_and_waits_for_confirmation(self) -> None:
+        decision_id = UUID("33333333-3333-4333-8333-333333333333")
+        prepared_at = datetime(2026, 8, 18, 16, 0, tzinfo=timezone.utc)
+        captured_at = datetime(2026, 8, 18, 15, 30, tzinfo=timezone.utc)
+        normalizer = FakeNormalizer()
+        service, runner = self.build_preparation_service(
+            normalizer,
+            clock=lambda: prepared_at,
+        )
+
+        view = await service.prepare(
+            DecisionPreparationRequest(
+                decision_id=decision_id,
+                raw_question="Should this release be deployed?",
+                data_classification=DataClassification.SENSITIVE,
+                evidence=(
+                    SuppliedEvidence(
+                        source_type="user_note",
+                        source="release checklist",
+                        captured_at=captured_at,
+                        excerpt="All pre-release checks passed.",
+                        classification=DataClassification.INTERNAL,
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(view.decision_id, decision_id)
+        self.assertTrue(view.awaiting_confirmation)
+        self.assertEqual(view.case.raw_question, "Should this release be deployed?")
+        self.assertEqual(view.case.data_classification, DataClassification.SENSITIVE)
+        self.assertEqual(view.evidence[0].evidence_id, "E-001")
+        self.assertEqual(
+            view.evidence[0].content_hash,
+            hashlib.sha256(b"All pre-release checks passed.").hexdigest(),
+        )
+        self.assertEqual(
+            view.evidence[0].verification_status,
+            VerificationStatus.USER_ASSERTED,
+        )
+        self.assertEqual(normalizer.requests[0].decision_id, decision_id)
+        self.assertEqual(runner.calls, [])
+
+        repeated = await service.prepare(
+            DecisionPreparationRequest(
+                decision_id=decision_id,
+                raw_question="Should this release be deployed?",
+                data_classification=DataClassification.SENSITIVE,
+                evidence=(
+                    SuppliedEvidence(
+                        source_type="user_note",
+                        source="release checklist",
+                        captured_at=captured_at,
+                        excerpt="All pre-release checks passed.",
+                        classification=DataClassification.INTERNAL,
+                    ),
+                ),
+            )
+        )
+        self.assertEqual(repeated, view)
+        self.assertEqual(len(normalizer.requests), 1)
+
+        with self.assertRaisesRegex(DecisionWorkflowConflict, "different"):
+            await service.prepare(
+                DecisionPreparationRequest(
+                    decision_id=decision_id,
+                    raw_question="A changed question must conflict.",
+                )
+            )
+        self.assertEqual(len(normalizer.requests), 1)
+
+    async def test_prepare_sanitizes_coordinator_failure(self) -> None:
+        normalizer = FakeNormalizer(
+            CoordinatorExecutionError("secret model-provider response")
+        )
+        service, _ = self.build_preparation_service(normalizer)
+
+        with self.assertRaises(DecisionPreparationFailed) as raised:
+            await service.prepare(
+                DecisionPreparationRequest(
+                    decision_id=uuid4(),
+                    raw_question="Should we deploy?",
+                )
+            )
+
+        self.assertNotIn("secret model-provider response", str(raised.exception))
 
     async def test_missing_workflow_is_reported_without_creating_state(self) -> None:
         case = make_case(confirmed=False)

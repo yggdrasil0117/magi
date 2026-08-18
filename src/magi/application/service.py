@@ -2,21 +2,32 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import hashlib
+import json
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
+from magi.agents.coordinator import (
+    CoordinatorExecutionError,
+    DecisionNormalizer,
+    NormalizationRequest,
+)
 from magi.domain import (
     ConstraintValidation,
     DecisionCase,
     DecisionState,
+    EvidenceItem,
     EvidenceSnapshot,
     ProtocolViolation,
+    VerificationStatus,
 )
+from magi.domain.models import utc_now
 from magi.orchestration import ConfirmationPayload, RunPayload, decision_thread_id
 
 from .models import DecisionView, DecisionViewProjector
+from .preparation import DecisionPreparationFailed, DecisionPreparationRequest
 
 
 class DecisionWorkflowNotFound(LookupError):
@@ -50,16 +61,79 @@ class DecisionApplicationService:
         self,
         graph: DecisionGraph,
         *,
+        normalizer: DecisionNormalizer | None = None,
         projector: DecisionViewProjector | None = None,
+        clock: Callable[[], datetime] = utc_now,
     ) -> None:
         self._graph = graph
+        self._normalizer = normalizer
         self._projector = projector or DecisionViewProjector()
+        self._clock = clock
+
+    async def prepare(self, request: DecisionPreparationRequest) -> DecisionView:
+        """Normalize one raw question and freeze supplied evidence before voting."""
+
+        if self._normalizer is None:
+            raise DecisionPreparationFailed("decision normalizer is not configured")
+        preparation_fingerprint = self._preparation_fingerprint(request)
+        saved = await self._graph.aget_state(self._config(request.decision_id, 1))
+        saved_values = self._values(saved)
+        if saved_values:
+            self._validate_saved_identity(saved_values, request.decision_id, 1)
+            if saved_values.get("preparation_fingerprint") != preparation_fingerprint:
+                raise DecisionWorkflowConflict(
+                    "the decision already has different preparation inputs"
+                )
+            return self._projector.project(saved_values)
+        try:
+            case = await self._normalizer.normalize(
+                NormalizationRequest(
+                    raw_question=request.raw_question,
+                    decision_id=request.decision_id,
+                    version=1,
+                    minimum_risk_level=request.minimum_risk_level,
+                    data_classification=request.data_classification,
+                )
+            )
+        except CoordinatorExecutionError as exc:
+            raise DecisionPreparationFailed("decision normalization failed") from exc
+
+        prepared_at = self._clock()
+        if prepared_at.tzinfo is None:
+            raise ProtocolViolation("decision preparation clock must be timezone-aware")
+        evidence = tuple(
+            EvidenceItem(
+                evidence_id=f"E-{index:03d}",
+                source_type=item.source_type,
+                source=item.source,
+                captured_at=item.captured_at,
+                content_hash=hashlib.sha256(item.excerpt.encode("utf-8")).hexdigest(),
+                excerpt=item.excerpt,
+                verification_status=VerificationStatus.USER_ASSERTED,
+                classification=item.classification,
+            )
+            for index, item in enumerate(request.evidence, start=1)
+        )
+        snapshot = EvidenceSnapshot(
+            decision_id=case.decision_id,
+            decision_version=case.version,
+            created_at=prepared_at,
+            frozen_at=prepared_at,
+            evidence=evidence,
+        )
+        return await self.wait_for_confirmation(
+            case,
+            snapshot,
+            preparation_fingerprint=preparation_fingerprint,
+        )
 
     async def wait_for_confirmation(
         self,
         case: DecisionCase,
         snapshot: EvidenceSnapshot,
         constraint_validations: Sequence[ConstraintValidation] = (),
+        *,
+        preparation_fingerprint: str | None = None,
     ) -> DecisionView:
         if case.confirmed_at is not None:
             raise DecisionWorkflowConflict("a prepared case must not be pre-confirmed")
@@ -78,6 +152,11 @@ class DecisionApplicationService:
                 saved_case != case
                 or saved_snapshot != snapshot
                 or saved_validations != tuple(constraint_validations)
+                or (
+                    preparation_fingerprint is not None
+                    and saved_values.get("preparation_fingerprint")
+                    != preparation_fingerprint
+                )
             ):
                 raise DecisionWorkflowConflict(
                     "the decision version already has different prepared inputs"
@@ -94,6 +173,8 @@ class DecisionApplicationService:
             "first_ballots": [],
             "review_ballots": [],
         }
+        if preparation_fingerprint is not None:
+            initial_state["preparation_fingerprint"] = preparation_fingerprint
         state = await self._graph.ainvoke(initial_state, config=config)
         view = self._projector.project(state)
         if not view.awaiting_confirmation:
@@ -268,3 +349,13 @@ class DecisionApplicationService:
         case = DecisionCase.model_validate(values["case"])
         if case.decision_id != decision_id or case.version != version:
             raise ProtocolViolation("checkpoint identity does not match its thread")
+
+    @staticmethod
+    def _preparation_fingerprint(request: DecisionPreparationRequest) -> str:
+        material = json.dumps(
+            request.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()

@@ -5,15 +5,14 @@
       "token_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "subject": "replace-with-operator-id",
       "actions": [
+        "decision:create",
         "decision:read",
         "decision:confirm",
         "decision:run",
         "decision:cancel"
       ],
-      "decision_ids": [
-        "00000000-0000-0000-0000-000000000001"
-      ],
-      "allow_all_decisions": false
+      "decision_ids": [],
+      "allow_all_decisions": true
     }
   ]
 }

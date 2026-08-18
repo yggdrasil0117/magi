@@ -9,10 +9,10 @@
 - Return DecisionView, never DecisionRecord.
 - Use REST for commands and WebSocket for event delivery.
 
-M2c-3 requires `Authorization: Bearer ...` for every decision route and an
-`Idempotency-Key` header for `confirm`, `run`, and `cancel`. Keys are 8 through
-200 characters using letters, digits, `.`, `_`, `:`, or `-`, and are scoped by
-the authenticated principal.
+M2c-5 requires `Authorization: Bearer ...` for every decision route and an
+`Idempotency-Key` header for `create`, `confirm`, `run`, and `cancel`. Keys are
+8 through 200 characters using letters, digits, `.`, `_`, `:`, or `-`, and are
+scoped by the authenticated principal.
 
 ## HTTP resources
 
@@ -30,9 +30,18 @@ the authenticated principal.
 | GET /v1/decisions/{id}/events | Replay authorized public events |
 | GET /v1/decisions | List authorized decisions |
 
-M2c-3 currently implements read, confirm, run, and cancel for already prepared
-decision versions. It does not advertise unimplemented create, prepare,
-revision, list, report, event replay, or WebSocket handlers.
+M2c-5 implements an atomic `POST /v1/decisions` create-and-prepare vertical
+slice in addition to read, confirm, run, and cancel. The command accepts a raw
+question, risk floor, data classification, and up to 50 supplied evidence
+items. It returns a `DecisionView` paused at user confirmation. Editable drafts
+and the separate prepare route remain unimplemented, as do revision, list,
+report, event replay, and WebSocket handlers.
+
+Decision creation requires the explicit `decision:create` permission. The
+server derives a stable decision ID from the authenticated principal and
+idempotency key so a retry after partial persistence returns to the same
+workflow thread. Clients cannot provide decision IDs, evidence IDs, hashes, or
+verification status during creation.
 
 ## Error envelope
 

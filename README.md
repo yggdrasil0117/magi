@@ -22,6 +22,8 @@ M2c-4a adds durable PostgreSQL API-command idempotency. Principal and client key
 
 M2c-4b adds the fail-closed production FastAPI factory. Its lifespan owns the shared PostgreSQL runtime, loads the three perspective skills, builds the OpenAI runners and LangGraph, injects durable command idempotency, and requires an explicit hashed bearer authorization policy.
 
+M2c-5 adds authenticated, idempotent decision creation. The non-voting Coordinator normalizes the raw question, application code seals retry-stable identity and user-asserted evidence, and the new workflow pauses at the existing confirmation gate before any perspective model runs.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -60,3 +62,4 @@ The shared application boundary is documented in docs/m2c2-application-service.m
 The initial HTTP transport is documented in docs/m2c3-fastapi-transport.md.
 Durable API command idempotency is documented in docs/m2c4a-postgres-command-idempotency.md.
 Production composition is documented in docs/m2c4b-production-composition.md.
+Coordinator-backed creation is documented in docs/m2c5-decision-preparation.md.

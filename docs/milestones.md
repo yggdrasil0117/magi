@@ -20,7 +20,8 @@ Exit criterion: all arbitration outcomes are reproducible from fixtures.
 
 ## M2: Three perspectives
 
-Status: M2a through M2c-4b implemented and locally verified.
+Status: M2a through M2c-5 implemented and locally verified; one acceptance
+increment remains.
 
 - Add LangGraph Graph API orchestration and PostgreSQL checkpointing.
 - Implement Coordinator.
@@ -53,6 +54,10 @@ PostgreSQL runtime. Raw principals and idempotency keys are never stored.
 M2c-4b adds the fail-closed production ASGI factory, lifecycle ownership of the
 shared runtime, startup skill validation, and a concrete hashed bearer policy
 with explicit action and decision allowlists.
+M2c-5 adds authenticated idempotent decision creation, production Coordinator
+composition, application-owned evidence sealing, and a confirmation pause
+before any perspective model call. M2c-6 is the remaining M2 acceptance and
+live-integration increment.
 
 ## M3: Cross-review
 

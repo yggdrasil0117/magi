@@ -31,12 +31,13 @@ class DecisionAuthorizer(Protocol):
     async def authorize(
         self,
         principal: ApiPrincipal,
-        decision_id: UUID,
+        decision_id: UUID | None,
         action: str,
     ) -> None: ...
 
 
 DecisionAction = Literal[
+    "decision:create",
     "decision:read",
     "decision:confirm",
     "decision:run",
@@ -55,7 +56,12 @@ class HashedBearerCredential(MagiModel):
 
     @model_validator(mode="after")
     def require_decision_scope(self) -> HashedBearerCredential:
-        if not self.allow_all_decisions and not self.decision_ids:
+        if "decision:create" in self.actions and not self.allow_all_decisions:
+            raise ValueError(
+                "static decision creation requires explicit all-decisions access"
+            )
+        resource_actions = self.actions - {"decision:create"}
+        if resource_actions and not self.allow_all_decisions and not self.decision_ids:
             raise ValueError(
                 "a bearer credential must allow all decisions or list decision IDs"
             )
@@ -115,7 +121,7 @@ class HashedBearerAuthorizer:
     async def authorize(
         self,
         principal: ApiPrincipal,
-        decision_id: UUID,
+        decision_id: UUID | None,
         action: str,
     ) -> None:
         credential = self._credentials_by_subject.get(principal.subject)
@@ -123,5 +129,9 @@ class HashedBearerAuthorizer:
             raise ApiAuthorizationError("principal is not present in the policy")
         if action not in credential.actions:
             raise ApiAuthorizationError("action is not allowed by the policy")
+        if action == "decision:create":
+            return
+        if decision_id is None:
+            raise ApiAuthorizationError("decision ID is required by the policy")
         if not credential.allow_all_decisions and decision_id not in credential.decision_ids:
             raise ApiAuthorizationError("decision is not allowed by the policy")

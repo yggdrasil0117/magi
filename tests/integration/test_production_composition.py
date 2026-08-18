@@ -107,12 +107,17 @@ class ProductionCompositionTests(unittest.TestCase):
             observed["checkpointer"] = checkpointer
             return EmptyGraph()
 
+        def coordinator_factory(settings: ProductionSettings) -> object:
+            observed["coordinator_settings"] = settings
+            return object()
+
         app = create_production_app(
             self.settings,
             authorizer=HashedBearerAuthorizer.from_file(self.policy_file),
             runtime_factory=lambda settings: runtime,
             runner_factory=runner_factory,
             graph_factory=graph_factory,
+            coordinator_factory=coordinator_factory,
         )
 
         self.assertEqual(runtime.open_calls, [])
@@ -132,6 +137,7 @@ class ProductionCompositionTests(unittest.TestCase):
         self.assertIs(observed["ledger"], runtime.invocation_ledger)
         self.assertEqual(observed["runner"], "runner")
         self.assertIs(observed["checkpointer"], runtime._checkpointer)
+        self.assertIs(observed["coordinator_settings"], self.settings)
 
     def test_startup_failure_closes_the_database_runtime(self) -> None:
         runtime = FakeRuntime()

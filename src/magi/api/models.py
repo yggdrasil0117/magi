@@ -6,7 +6,29 @@ from datetime import datetime
 
 from pydantic import Field, model_validator
 
+from magi.domain import DataClassification, RiskLevel
 from magi.domain.models import MagiModel
+
+
+class SuppliedEvidenceCommand(MagiModel):
+    source_type: str = Field(min_length=1, max_length=80)
+    source: str = Field(min_length=1, max_length=2000)
+    captured_at: datetime
+    excerpt: str = Field(min_length=1, max_length=20_000)
+    classification: DataClassification
+
+    @model_validator(mode="after")
+    def require_timezone(self) -> SuppliedEvidenceCommand:
+        if self.captured_at.tzinfo is None:
+            raise ValueError("captured_at must be timezone-aware")
+        return self
+
+
+class CreateDecisionCommand(MagiModel):
+    raw_question: str = Field(min_length=1, max_length=20_000)
+    minimum_risk_level: RiskLevel = RiskLevel.LOW
+    data_classification: DataClassification = DataClassification.INTERNAL
+    evidence: tuple[SuppliedEvidenceCommand, ...] = Field(default=(), max_length=50)
 
 
 class ConfirmDecisionCommand(MagiModel):

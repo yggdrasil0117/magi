@@ -11,6 +11,7 @@ class MagiGraphState(TypedDict, total=False):
 
     case: dict[str, Any]
     snapshot: dict[str, Any]
+    preparation_fingerprint: str
     constraint_validations: list[dict[str, Any]]
     first_ballots: Annotated[list[dict[str, Any]], operator.add]
     review_ballots: Annotated[list[dict[str, Any]], operator.add]
@@ -18,4 +19,3 @@ class MagiGraphState(TypedDict, total=False):
     result: dict[str, Any]
     phase: str
     cancelled: bool
-

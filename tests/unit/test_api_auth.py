@@ -90,6 +90,29 @@ class HashedBearerAuthorizerTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ApiAuthorizationError):
             await authorizer.authorize(principal, uuid4(), "decision:cancel")
 
+    async def test_create_permission_is_explicit_and_not_resource_scoped(self) -> None:
+        credential = HashedBearerCredential(
+            token_sha256=TOKEN_DIGEST,
+            subject="creator",
+            actions=frozenset({"decision:create"}),
+            allow_all_decisions=True,
+        )
+        authorizer = HashedBearerAuthorizer(
+            HashedBearerPolicy(credentials=(credential,))
+        )
+        principal = await authorizer.authenticate(TOKEN)
+
+        await authorizer.authorize(principal, None, "decision:create")
+        with self.assertRaises(ApiAuthorizationError):
+            await authorizer.authorize(principal, uuid4(), "decision:read")
+
+        with self.assertRaises(ValidationError):
+            HashedBearerCredential(
+                token_sha256="1" * 64,
+                subject="scoped-creator",
+                actions=frozenset({"decision:create"}),
+            )
+
     def test_policy_rejects_unscoped_or_duplicate_credentials(self) -> None:
         with self.assertRaises(ValidationError):
             HashedBearerPolicy(credentials=())

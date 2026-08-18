@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from typing import Annotated, Protocol
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -18,10 +18,13 @@ from magi import __version__
 from magi.application import (
     CommandIdempotencyConflict,
     CommandIdempotencyStore,
+    DecisionPreparationFailed,
+    DecisionPreparationRequest,
     DecisionView,
     DecisionWorkflowConflict,
     DecisionWorkflowNotFound,
     InMemoryCommandIdempotencyStore,
+    SuppliedEvidence,
 )
 from magi.domain import ProtocolViolation
 
@@ -36,14 +39,18 @@ from .models import (
     ApiErrorResponse,
     CancelDecisionCommand,
     ConfirmDecisionCommand,
+    CreateDecisionCommand,
     RunDecisionCommand,
 )
 
 
 IDEMPOTENCY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$"
+CREATION_NAMESPACE = UUID("7d064bfc-7ab6-4e37-a7ad-94d92b967a23")
 
 
 class DecisionApiService(Protocol):
+    async def prepare(self, request: DecisionPreparationRequest) -> DecisionView: ...
+
     async def get(self, decision_id: UUID, version: int) -> DecisionView: ...
 
     async def confirm(
@@ -139,6 +146,17 @@ def create_app(
             "The requested decision version was not found.",
         )
 
+    @app.exception_handler(DecisionPreparationFailed)
+    async def preparation_failed(
+        request: Request,
+        exc: DecisionPreparationFailed,
+    ) -> JSONResponse:
+        return _error_response(
+            422,
+            "decision_preparation_failed",
+            "The decision could not be prepared from the supplied input.",
+        )
+
     @app.exception_handler(DecisionWorkflowConflict)
     async def workflow_conflict(
         request: Request,
@@ -199,6 +217,39 @@ def create_app(
     @app.get("/healthz", include_in_schema=False)
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.post(
+        "/v1/decisions",
+        response_model=DecisionView,
+        status_code=201,
+        responses=_error_models(401, 403, 409, 422),
+    )
+    async def create_decision(
+        command: CreateDecisionCommand,
+        idempotency_key: IdempotencyDependency,
+        principal: PrincipalDependency,
+    ) -> DecisionView:
+        await authorizer.authorize(principal, None, "decision:create")
+        decision_id = _creation_decision_id(principal.subject, idempotency_key)
+        request = DecisionPreparationRequest(
+            decision_id=decision_id,
+            raw_question=command.raw_question,
+            minimum_risk_level=command.minimum_risk_level,
+            data_classification=command.data_classification,
+            evidence=tuple(
+                SuppliedEvidence.model_validate(item.model_dump())
+                for item in command.evidence
+            ),
+        )
+        return await _run_command(
+            command_store,
+            principal,
+            idempotency_key,
+            "create",
+            decision_id,
+            command,
+            lambda: service.prepare(request),
+        )
 
     @app.get(
         "/v1/decisions/{decision_id}",
@@ -295,7 +346,7 @@ async def _run_command(
     principal: ApiPrincipal,
     idempotency_key: str,
     action: str,
-    decision_id: UUID,
+    decision_id: UUID | None,
     command: object,
     operation: Callable[[], Awaitable[DecisionView]],
 ) -> DecisionView:
@@ -307,7 +358,7 @@ async def _run_command(
     )
 
 
-def _fingerprint(action: str, decision_id: UUID, command: object) -> str:
+def _fingerprint(action: str, decision_id: UUID | None, command: object) -> str:
     if hasattr(command, "model_dump"):
         body = command.model_dump(mode="json")
     else:
@@ -315,7 +366,7 @@ def _fingerprint(action: str, decision_id: UUID, command: object) -> str:
     material = json.dumps(
         {
             "action": action,
-            "decision_id": str(decision_id),
+            "decision_id": str(decision_id) if decision_id is not None else None,
             "body": body,
         },
         ensure_ascii=False,
@@ -323,6 +374,13 @@ def _fingerprint(action: str, decision_id: UUID, command: object) -> str:
         separators=(",", ":"),
     )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _creation_decision_id(principal: str, idempotency_key: str) -> UUID:
+    material = hashlib.sha256(
+        f"magi-create-v1\0{principal}\0{idempotency_key}".encode("utf-8")
+    ).hexdigest()
+    return uuid5(CREATION_NAMESPACE, material)
 
 
 def _error_response(

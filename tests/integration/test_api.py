@@ -17,6 +17,8 @@ from magi.api import (
 )
 from magi.application import (
     DecisionApplicationService,
+    DecisionPreparationFailed,
+    DecisionPreparationRequest,
     DecisionView,
     DecisionViewProjector,
     DecisionWorkflowConflict,
@@ -61,6 +63,9 @@ class FakeDecisionService:
     async def get(self, decision_id: UUID, version: int) -> DecisionView:
         return self._result("get", decision_id, version)
 
+    async def prepare(self, request: DecisionPreparationRequest) -> DecisionView:
+        return self._result("prepare", self.view.decision_id, 1, request)
+
     async def confirm(
         self,
         decision_id: UUID,
@@ -86,7 +91,7 @@ class FakeDecisionService:
 class FakeAuthorizer:
     def __init__(self) -> None:
         self.denied_actions: set[str] = set()
-        self.authorizations: list[tuple[str, UUID, str]] = []
+        self.authorizations: list[tuple[str, UUID | None, str]] = []
 
     async def authenticate(self, bearer_token: str) -> ApiPrincipal:
         subjects = {
@@ -100,7 +105,7 @@ class FakeAuthorizer:
     async def authorize(
         self,
         principal: ApiPrincipal,
-        decision_id: UUID,
+        decision_id: UUID | None,
         action: str,
     ) -> None:
         self.authorizations.append((principal.subject, decision_id, action))
@@ -173,6 +178,59 @@ class FastApiAdapterTests(unittest.TestCase):
             self.authorizer.authorizations[-1],
             ("user-1", DECISION_ID, "decision:read"),
         )
+
+    def test_create_prepares_once_and_returns_confirmation_gate(self) -> None:
+        body = {
+            "raw_question": "Should this release be deployed?",
+            "minimum_risk_level": "medium",
+            "data_classification": "internal",
+            "evidence": [
+                {
+                    "source_type": "user_note",
+                    "source": "release checklist",
+                    "captured_at": "2026-08-18T15:30:00+00:00",
+                    "excerpt": "All checks passed.",
+                    "classification": "internal",
+                }
+            ],
+        }
+        headers = self.command_headers("create-command-01")
+
+        first = self.client.post("/v1/decisions", headers=headers, json=body)
+        repeated = self.client.post("/v1/decisions", headers=headers, json=body)
+
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(repeated.status_code, 201)
+        self.assertEqual(first.json(), repeated.json())
+        self.assertEqual(tuple(call[0] for call in self.service.calls), ("prepare",))
+        self.assertEqual(
+            self.authorizer.authorizations[-1],
+            ("user-1", None, "decision:create"),
+        )
+        request = self.service.calls[0][3]
+        self.assertIsInstance(request, DecisionPreparationRequest)
+
+    def test_create_failure_is_sanitized_and_not_cached(self) -> None:
+        self.service.error = DecisionPreparationFailed("secret coordinator detail")
+        body = {"raw_question": "Sensitive secret question"}
+        headers = self.command_headers("create-command-02")
+
+        response = self.client.post("/v1/decisions", headers=headers, json=body)
+        retried = self.client.post("/v1/decisions", headers=headers, json=body)
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(retried.status_code, 422)
+        self.assertEqual(
+            response.json()["error"]["code"],
+            "decision_preparation_failed",
+        )
+        self.assertNotIn("Sensitive secret question", response.text)
+        self.assertNotIn("secret coordinator detail", response.text)
+        first_request = self.service.calls[0][3]
+        second_request = self.service.calls[1][3]
+        self.assertIsInstance(first_request, DecisionPreparationRequest)
+        self.assertIsInstance(second_request, DecisionPreparationRequest)
+        self.assertEqual(first_request.decision_id, second_request.decision_id)
 
     def test_confirm_requires_valid_idempotency_key_and_body(self) -> None:
         body = {

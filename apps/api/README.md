@@ -11,6 +11,7 @@ there is intentionally no unauthenticated default application.
 Implemented routes:
 
 - `GET /healthz`
+- `POST /v1/decisions`
 - `GET /v1/decisions/{decision_id}`
 - `POST /v1/decisions/{decision_id}/confirm`
 - `POST /v1/decisions/{decision_id}/run`
@@ -25,5 +26,7 @@ authorization policy. Start it as an ASGI factory:
 python -m uvicorn magi.api.production:create_production_app --factory --host 127.0.0.1
 ~~~
 
-Creation/preparation, history, reports, and WebSocket events remain separate
-increments.
+M2c-5 makes `POST /v1/decisions` an atomic create-and-prepare command. It invokes
+the non-voting Coordinator, seals supplied evidence as user-asserted, and pauses
+at confirmation. Editable drafts, a separate prepare route, history, reports,
+and WebSocket events remain separate increments.

@@ -51,6 +51,9 @@ Trusted only after validation:
 | Production starts with test adapters | Production factory requires PostgreSQL, OpenAI, skills, and authorization policy; no in-memory fallback |
 | Static bearer token disclosure | Store only SHA-256 digests in policy, compare digests in constant time, and require high-entropy tokens |
 | Over-broad API credential | Bind every subject to explicit actions and decision IDs; all-decisions access requires an explicit flag |
+| Client chooses decision or evidence identity | Derive decision ID from principal and idempotency key; assign evidence IDs in application code |
+| Client marks supplied evidence verified | Seal supplied evidence as user-asserted and calculate content hashes server-side |
+| Create retry duplicates work or changes normalization | Reuse a deterministic principal-scoped decision ID and validate a checkpointed preparation fingerprint before Coordinator invocation |
 | Secret exposure | Keep credentials in the server-side gateway; never place them in prompts |
 | Duplicate run | Require idempotency keys and stage transition guards |
 | Retry counted as another vote | Reference attempts in audit; count one accepted ballot per agent and round |

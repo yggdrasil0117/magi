@@ -59,6 +59,10 @@ unique subject, an explicit action set, and either an explicit decision-ID
 allowlist or `allow_all_decisions: true`. Duplicate digests and subjects,
 unknown actions, and unscoped credentials fail validation.
 
+M2c-5 adds `decision:create`. Because the static adapter has no durable
+creator-ownership store, this action requires an explicit
+`allow_all_decisions: true` flag. Scoped resource credentials cannot create.
+
 A digest does not make a weak token safe against offline guessing. The static
 adapter is appropriate for the initial controlled deployment. A broader
 deployment should inject an identity-provider-backed `DecisionAuthorizer`
@@ -91,13 +95,11 @@ this command.
 
 ## Deliberate limits
 
-The current API operates on already prepared decisions. Coordinator-backed
-creation/preparation remains the next increment. The workstation still has no
-configured real PostgreSQL test DSN, and no live OpenAI call is made in the
-automated suite.
+M2c-5 now adds Coordinator-backed atomic creation and preparation. Editable
+drafts remain deferred. The workstation still has no configured real
+PostgreSQL test DSN, and no live OpenAI call is made in the automated suite.
 
 ## Next increment
 
-Add an authenticated decision-preparation command that invokes the non-voting
-Coordinator, seals application-owned fields, freezes the supplied evidence
-snapshot, and pauses at the existing confirmation gate.
+Run the M2c-6 acceptance increment with live PostgreSQL/OpenAI smoke coverage,
+readiness checks, and the final M2 acceptance record.

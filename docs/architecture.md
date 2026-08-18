@@ -59,6 +59,10 @@ Web, TUI, and CLI never import or invoke agent runners directly. They issue comm
 
 Normalize the raw question into a DecisionCase. Identify options, user constraints, claims, unknowns, risk level, and data classification. Do not recommend an option or participate in voting. Do not promote a user assertion to verified fact.
 
+M2c-5 places the Coordinator behind the application preparation service. The
+application owns decision identity, freezes supplied evidence, marks it as
+user-asserted, and enters LangGraph only after normalization succeeds.
+
 ### Evidence service
 
 Collect authorized read-only evidence, record provenance, classification, capture time, and a content hash, then freeze an EvidenceSnapshot before voting begins. New evidence creates a new decision version.

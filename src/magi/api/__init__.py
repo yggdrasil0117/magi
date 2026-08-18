@@ -15,7 +15,9 @@ from .models import (
     ApiErrorResponse,
     CancelDecisionCommand,
     ConfirmDecisionCommand,
+    CreateDecisionCommand,
     RunDecisionCommand,
+    SuppliedEvidenceCommand,
 )
 from .production import (
     ProductionConfigurationError,
@@ -31,6 +33,7 @@ __all__ = [
     "ApiPrincipal",
     "CancelDecisionCommand",
     "ConfirmDecisionCommand",
+    "CreateDecisionCommand",
     "DecisionApiService",
     "DecisionAuthorizer",
     "HashedBearerAuthorizer",
@@ -39,6 +42,7 @@ __all__ = [
     "ProductionConfigurationError",
     "ProductionSettings",
     "RunDecisionCommand",
+    "SuppliedEvidenceCommand",
     "create_app",
     "create_production_app",
 ]

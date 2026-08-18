@@ -15,7 +15,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from magi.agents import (
+    DecisionNormalizer,
     InvocationLedger,
+    LangChainCoordinator,
     LangChainPerspectiveRunner,
     PerspectiveRunner,
     PerspectiveSkillLoader,
@@ -24,6 +26,7 @@ from magi.application import (
     CommandIdempotencyStore,
     DecisionApplicationService,
     DecisionGraph,
+    DecisionPreparationRequest,
     DecisionView,
 )
 from magi.domain import AgentName
@@ -138,6 +141,9 @@ class _DeferredDecisionService:
             raise RuntimeError("production decision service is not ready")
         return self._delegate
 
+    async def prepare(self, request: DecisionPreparationRequest) -> DecisionView:
+        return await self._service().prepare(request)
+
     async def get(self, decision_id: UUID, version: int) -> DecisionView:
         return await self._service().get(decision_id, version)
 
@@ -170,6 +176,7 @@ class _DeferredDecisionService:
 RuntimeFactory = Callable[[ProductionSettings], ProductionPersistence]
 RunnerFactory = Callable[[ProductionSettings, InvocationLedger], PerspectiveRunner]
 GraphFactory = Callable[[PerspectiveRunner, Any], DecisionGraph]
+CoordinatorFactory = Callable[[ProductionSettings], DecisionNormalizer]
 
 
 def create_production_app(
@@ -179,6 +186,7 @@ def create_production_app(
     runtime_factory: RuntimeFactory | None = None,
     runner_factory: RunnerFactory | None = None,
     graph_factory: GraphFactory | None = None,
+    coordinator_factory: CoordinatorFactory | None = None,
 ) -> FastAPI:
     """Create the production ASGI app without insecure fallback adapters."""
 
@@ -189,6 +197,7 @@ def create_production_app(
     selected_runtime_factory = runtime_factory or _build_runtime
     selected_runner_factory = runner_factory or _build_runner
     selected_graph_factory = graph_factory or _build_graph
+    selected_coordinator_factory = coordinator_factory or _build_coordinator
     runtime = selected_runtime_factory(selected_settings)
     deferred_service = _DeferredDecisionService()
 
@@ -201,7 +210,10 @@ def create_production_app(
                 runtime.invocation_ledger,
             )
             graph = selected_graph_factory(runner, runtime.checkpointer)
-            deferred_service.bind(DecisionApplicationService(graph))
+            coordinator = selected_coordinator_factory(selected_settings)
+            deferred_service.bind(
+                DecisionApplicationService(graph, normalizer=coordinator)
+            )
             app.state.magi_runtime = runtime
             app.state.magi_model = selected_settings.openai_model
             yield
@@ -250,6 +262,14 @@ def _build_runner(
 
 def _build_graph(runner: PerspectiveRunner, checkpointer: Any) -> DecisionGraph:
     return build_langgraph_workflow(runner, checkpointer=checkpointer)
+
+
+def _build_coordinator(settings: ProductionSettings) -> DecisionNormalizer:
+    return LangChainCoordinator.from_openai(
+        model=settings.openai_model,
+        skills_root=settings.skills_dir,
+        api_key=settings.openai_api_key,
+    )
 
 
 def _required(values: Mapping[str, str], name: str) -> str:
