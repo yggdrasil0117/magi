@@ -93,7 +93,7 @@ and every second-round ballot requires an audit reason whether retained or revis
 
 ## UI/UX delivery track
 
-Status: UI-D1 and UI-D2 accepted; UI-D3 visual foundation proposed.
+Status: UI-D1 through UI-D3 accepted; UI-D4a implemented; UI-D4b pending confirmation.
 
 - UI-D1: define user journeys, information architecture, and every workflow state.
 - UI-D2: confirm low-fidelity Web and terminal wireframes before visual styling.

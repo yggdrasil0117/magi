@@ -3,14 +3,18 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { isAllowedDecisionApiPath, upstreamPath } from "./proxy-contract.mjs";
+
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.MAGI_WEB_PORT || "3000");
 const upstream = new URL(process.env.MAGI_API_URL || "http://127.0.0.1:8000");
-const maxReportBytes = 1_000_000;
+const maxResponseBytes = 1_000_000;
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
+  ["/workspace.mjs", ["workspace.mjs", "text/javascript; charset=utf-8"]],
   ["/report.mjs", ["report.mjs", "text/javascript; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
+  ["/assets/magi-mark.svg", ["prototypes/assets/magi-fallback-mark.svg", "image/svg+xml"]],
 ]);
 
 if (
@@ -42,26 +46,22 @@ createServer(async (request, response) => {
       response.end(body);
       return;
     }
-    if (request.method === "GET" && isReportPath(requestUrl.pathname)) {
-      await proxyReport(request, response, requestUrl);
+    if (request.method === "GET" && isAllowedDecisionApiPath(requestUrl.pathname)) {
+      await proxyDecisionResource(request, response, requestUrl);
       return;
     }
     response.writeHead(404, { ...securityHeaders, "content-type": "text/plain; charset=utf-8" });
     response.end("Not found.\n");
   } catch {
     response.writeHead(502, { ...securityHeaders, "content-type": "application/json" });
-    response.end(JSON.stringify({ error: { code: "web_proxy_failed", message: "The report API could not be reached." } }));
+    response.end(JSON.stringify({ error: { code: "web_proxy_failed", message: "The decision API could not be reached." } }));
   }
 }).listen(port, "127.0.0.1", () => {
-  process.stdout.write(`MAGI report viewer: http://127.0.0.1:${port}\n`);
+  process.stdout.write(`MAGI decision workspace: http://127.0.0.1:${port}\n`);
 });
 
-function isReportPath(pathname) {
-  return /^\/api\/v1\/decisions\/[0-9a-fA-F-]{36}\/report$/.test(pathname);
-}
-
-async function proxyReport(request, response, requestUrl) {
-  const target = new URL(requestUrl.pathname.slice(4) + requestUrl.search, upstream);
+async function proxyDecisionResource(request, response, requestUrl) {
+  const target = new URL(upstreamPath(requestUrl), upstream);
   const headers = { accept: "application/json" };
   if (request.headers.authorization) headers.authorization = request.headers.authorization;
   const upstreamResponse = await fetch(target, { headers, redirect: "error", cache: "no-store" });
@@ -75,7 +75,7 @@ async function proxyReport(request, response, requestUrl) {
 
 async function boundedBody(upstreamResponse) {
   const declared = Number(upstreamResponse.headers.get("content-length") || "0");
-  if (declared > maxReportBytes) throw new Error("report response exceeds limit");
+  if (declared > maxResponseBytes) throw new Error("decision response exceeds limit");
   if (!upstreamResponse.body) return Buffer.alloc(0);
   const reader = upstreamResponse.body.getReader();
   const chunks = [];
@@ -84,9 +84,9 @@ async function boundedBody(upstreamResponse) {
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
-    if (total > maxReportBytes) {
+    if (total > maxResponseBytes) {
       await reader.cancel();
-      throw new Error("report response exceeds limit");
+      throw new Error("decision response exceeds limit");
     }
     chunks.push(Buffer.from(value));
   }

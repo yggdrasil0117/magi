@@ -1,6 +1,6 @@
 # MAGI UI/UX delivery plan
 
-Status: UI-D1 and UI-D2 accepted; UI-D3 visual foundation proposed
+Status: UI-D1 through UI-D3 accepted; UI-D4a implemented; UI-D4b pending confirmation
 
 ## Product objective
 
@@ -123,6 +123,10 @@ in the same contract.
 
 Build shared contract tests, then TUI workflow, Web workflow, and CLI automation.
 No client may bypass the API or import agent/orchestration implementations.
+
+Implementation slices are defined in `docs/ui-d4-implementation-plan.md`. UI-D4a
+starts with the real read-only Web workspace over `DecisionView`; unavailable list
+and mutation contracts remain explicit rather than simulated.
 
 ### UI-D5: acceptance
 

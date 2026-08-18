@@ -201,4 +201,4 @@ function bind() {
   });
 }
 
-if (typeof document !== "undefined") bind();
+if (typeof document !== "undefined" && document.querySelector("#report-form")) bind();

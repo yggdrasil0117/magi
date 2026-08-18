@@ -1,4 +1,10 @@
-# Web report viewer
+# Web decision workspace
+
+UI-D4a upgrades `/` from the M3 report-only surface to a real read-only
+`DecisionView` workspace. Enter a known decision ID, version, and bearer token to
+render authoritative case, evidence, disclosed perspectives, available actions,
+and the final report. The token stays in page memory. The page does not fabricate
+an inbox or issue mutations before their UI-D4b confirmation design is accepted.
 
 ## UI-D2 design fixture
 
@@ -15,9 +21,9 @@ original fallback mark, command/reading density controls, optional licensed-asse
 slots, and responsive behavior. It is also synthetic and excluded from the
 production report proxy.
 
-M3c provides a dependency-free report viewer that consumes the same authenticated
-JSON report as the terminal client. It uses DOM `textContent` for external prose,
-keeps the bearer token only in page memory, and never calculates a vote or status.
+The original M3 renderer remains the final-report component and consumes the same
+authenticated report projection as the terminal client. External prose enters the
+DOM through `textContent`; the Web client never calculates a vote or status.
 
 Start MAGI's API, then run:
 
@@ -26,10 +32,11 @@ $env:MAGI_API_URL = "http://127.0.0.1:8000"
 node apps/web/server.mjs
 ~~~
 
-Open `http://127.0.0.1:3000`. The local server binds only to loopback and proxies
-only final-report reads, so the production API does not need a permissive CORS
-policy. Static and proxied responses include a restrictive CSP and no-store
+Open `http://127.0.0.1:3000`. The local server binds only to loopback and allowlists
+decision and final-report reads, so the production API does not need a permissive
+CORS policy. Static and proxied responses include a restrictive CSP and no-store
 headers.
 
-The full Next.js workflow, history, and revision comparison remain planned for
-M5. This M3 surface intentionally proves report parity without expanding scope.
+Mutation workflows, authorized inbox, history, and revision comparison remain
+separate UI-D4 increments because the required contracts and confirmation behavior
+must be accepted independently.

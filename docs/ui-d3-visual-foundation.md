@@ -1,6 +1,6 @@
 # UI-D3: visual foundation and component contract
 
-Status: proposed; awaiting visual confirmation before UI-D4
+Status: accepted; all six UI-D3 decisions confirmed
 
 ## Direction
 
@@ -191,7 +191,7 @@ degraded recovery states; command/reading density; responsive collapse; original
 fallback mark; licensed slots; keyboard focus; and reduced-motion behavior. It uses
 synthetic data and does not call the API or ship through the production server.
 
-## UI-D3 confirmation requested
+## Confirmed UI-D3 decisions
 
 1. Accept the amber/black operational palette with red reserved for true alarms.
 2. Accept system condensed/monospace stacks without copied series fonts.
@@ -201,5 +201,5 @@ synthetic data and does not call the API or ship through the production server.
 5. Accept the original three-cell mark as the unlicensed fallback.
 6. Accept the responsive, motion, terminal, focus, and accessibility rules.
 
-After these six decisions are accepted, UI-D4 can implement production components
-and workflow screens against authoritative API contracts.
+These six decisions are frozen. UI-D4 production work must use these tokens and
+component semantics unless a separately reviewed visual revision supersedes them.

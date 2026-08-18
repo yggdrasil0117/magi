@@ -1,49 +1,54 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark">
-    <title>MAGI Decision Report</title>
-    <link rel="stylesheet" href="/styles.css">
-  </head>
-  <body>
-    <main class="shell">
-      <header class="masthead">
-        <div>
-          <p class="eyebrow">THREE-PERSPECTIVE DECISION SYSTEM</p>
-          <h1>MAGI REPORT CONSOLE</h1>
-        </div>
-        <div class="signal" aria-label="System ready"><span></span> REPORT CHANNEL</div>
-      </header>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>MAGI Decision Workspace</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#workspace-root">跳到决策内容</a>
+  <div class="top-rule" aria-hidden="true"><i></i><i></i><i></i></div>
+  <header class="command-header">
+    <div class="identity"><img src="/assets/magi-mark.svg" alt="MAGI 原创三单元标志"><div><span>DECISION SUPPORT</span><strong>MAGI</strong></div></div>
+    <div class="header-state"><span>SYSTEM CONDITION</span><strong id="system-condition">AWAITING ACCESS</strong></div>
+    <div class="link-state"><span><i></i> LOOPBACK WEB / READY</span><code>TOKEN: MEMORY ONLY</code></div>
+  </header>
 
-      <section class="query-panel" aria-labelledby="query-title">
-        <div>
-          <p class="panel-index">01 / REPORT ACCESS</p>
-          <h2 id="query-title">读取最终决策报告</h2>
-          <p>令牌只保留在当前页面内存，不写入浏览器存储。</p>
-        </div>
-        <form id="report-form">
-          <label>
-            <span>Decision ID</span>
-            <input id="decision-id" name="decision_id" type="text" required
-              placeholder="11111111-1111-4111-8111-111111111111" autocomplete="off">
-          </label>
-          <label>
-            <span>Version</span>
-            <input id="version" name="version" type="number" min="1" value="1" required>
-          </label>
-          <label class="token-field">
-            <span>Bearer token</span>
-            <input id="token" name="token" type="password" required autocomplete="off">
-          </label>
-          <button type="submit">LOAD REPORT <span aria-hidden="true">→</span></button>
-        </form>
+  <div class="shell">
+    <aside class="access-rail">
+      <div class="index-label"><b>01</b><span>DECISION ACCESS</span></div>
+      <p>读取一个已知且获授权的决策版本。当前 API 尚不提供决策收件箱。</p>
+      <form id="access-form">
+        <label><span>DECISION ID</span><input name="decision_id" type="text" required autocomplete="off" placeholder="UUID"></label>
+        <label><span>VERSION</span><input name="version" type="number" min="1" value="1" required></label>
+        <label><span>BEARER TOKEN</span><input name="token" type="password" required autocomplete="off"></label>
+        <button type="submit">同步决策 <span aria-hidden="true">→</span></button>
+      </form>
+      <div class="privacy-note"><strong>LOCAL CREDENTIAL BOUNDARY</strong><p>令牌不写入 localStorage、sessionStorage、URL 或 Cookie。</p></div>
+    </aside>
+
+    <main class="main">
+      <section class="locator" aria-labelledby="decision-title">
+        <div><span id="decision-identity">NO DECISION LOADED</span><h1 id="decision-title">决策工作区</h1></div>
+        <dl><div><dt>RISK</dt><dd id="decision-risk">—</dd></div><div><dt>CLASS</dt><dd id="decision-class">—</dd></div><div><dt>SCHEMA</dt><dd>1.0</dd></div></dl>
       </section>
-
-      <p id="status-message" class="status-message" role="status" aria-live="polite"></p>
-      <section id="report-root" class="report-root" aria-live="polite" hidden></section>
+      <nav class="sections" aria-label="工作区分区"><span class="active"><b>01</b> 概览</span><span><b>02</b> 证据</span><span><b>03</b> 三方观点</span><span><b>04</b> 报告</span><span><b>05</b> 审计</span></nav>
+      <p id="status-message" class="status-message" role="status" aria-live="polite">输入连接信息后读取权威 DecisionView。</p>
+      <section id="workspace-root" class="workspace-root" aria-live="polite" tabindex="-1" hidden></section>
     </main>
-    <script type="module" src="/report.mjs"></script>
-  </body>
+
+    <aside class="diagnostic">
+      <div class="index-label"><b>03</b><span>MAGI DIAGNOSTIC</span></div>
+      <div class="diagnostic-cell melchior"><code>M-01</code><strong>MELCHIOR</strong><span>证据 / 逻辑 / 可行性</span></div>
+      <div class="diagnostic-cell balthasar"><code>B-02</code><strong>BALTHASAR</strong><span>安全 / 影响 / 可逆性</span></div>
+      <div class="diagnostic-cell casper"><code>C-03</code><strong>CASPER</strong><span>战略 / 替代 / 长期性</span></div>
+      <dl class="protocol"><div><dt>DISCLOSURE</dt><dd>STATE-BOUND</dd></div><div><dt>ARBITER</dt><dd>DETERMINISTIC</dd></div><div><dt>CACHE</dt><dd>NO-STORE</dd></div><div><dt>MODE</dt><dd>READ ONLY</dd></div></dl>
+      <div class="asset-slot"><span>OPTIONAL LICENSED SLOT</span><strong>CONTEXT ART / FRAME</strong><p>当前生产基础层使用中性回退，不请求第三方素材。</p></div>
+    </aside>
+  </div>
+  <footer><span>UI-D4A</span><span>DECISIONVIEW 1.0</span><span>API 0.3.0</span><span>READ-ONLY PRODUCTION FOUNDATION</span></footer>
+  <script type="module" src="/workspace.mjs"></script>
+</body>
 </html>

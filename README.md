@@ -93,3 +93,6 @@ The accepted UI-D2 Web/TUI wireframes are documented in docs/ui-d2-wireframes.md
 official-material slots and release gates are defined in docs/ui-asset-governance.md.
 The proposed UI-D3 visual tokens and component contract are documented in
 docs/ui-d3-visual-foundation.md, with a high-fidelity fixture under apps/web/prototypes/.
+UI-D4 production increments and current API gaps are documented in
+docs/ui-d4-implementation-plan.md. UI-D4a upgrades the loopback Web client to a
+real read-only `DecisionView` workspace without fabricating an inbox or mutations.
