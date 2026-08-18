@@ -1,6 +1,6 @@
 # MAGI UI/UX delivery plan
 
-Status: UI-D1 through UI-D3 accepted; UI-D4a implemented; UI-D4b pending confirmation
+Status: UI-D1 through UI-D4a accepted; UI-D4b-1 implemented; UI-D4b-2 pending
 
 ## Product objective
 

@@ -1,4 +1,5 @@
 import { renderReport, safeText } from "./report.mjs";
+import { commandPresentation, createCommandIntent, executeCommand } from "./commands.mjs";
 
 const REQUIRED_FIELDS = [
   "schema_version", "decision_id", "version", "state", "case", "evidence",
@@ -8,6 +9,10 @@ const KNOWN_ACTIONS = new Set(["confirm", "run", "cancel"]);
 const DISCLOSED_BALLOT_STATES = new Set([
   "cross_review", "arbitrated", "completed", "insufficient_information", "degraded", "failed",
 ]);
+let currentView = null;
+let currentToken = "";
+let dialogAction = null;
+let pendingIntent = null;
 
 export const STATE_PRESENTATION = Object.freeze({
   created: ["CREATED", "草案已创建", "决策仍在准备阶段。", "waiting"],
@@ -91,6 +96,7 @@ function cleanList(values) {
 
 export function renderWorkspace(root, document) {
   const view = decisionWorkspaceView(document);
+  currentView = view;
   root.replaceChildren();
   root.append(renderState(view), renderCase(view), renderDisclosure(view), renderEvidence(view));
   const reportRoot = element("section", "authoritative-report");
@@ -173,9 +179,25 @@ function renderActions(view) {
   const code = element("div", "gate-code");
   code.append(element("span", "", "AVAILABLE ACTIONS"), element("b", "", view.actions.length ? view.actions.join(" / ").toUpperCase() : "NONE"));
   const copy = element("div", "gate-copy");
-  copy.append(element("strong", "", "UI-D4a 为只读生产基础层"), element("p", "", view.actions.length ? "服务端已声明可用操作；写入控件将在 UI-D4b 经二次确认设计后接入。" : "当前服务端未声明可执行操作。"));
-  section.append(code, copy);
+  copy.append(element("strong", "", view.actions.length ? "只执行服务端明确允许的命令" : "当前没有可执行命令"), element("p", "", view.actions.length ? "确认与取消需要再次核对后果；运行将在 UI-D4b-2 接入。" : "客户端不会根据状态自行推断权限。"));
+  const controls = element("div", "gate-actions");
+  if (view.actions.includes("confirm")) controls.append(commandButton("confirm", "确认并冻结", "primary"));
+  if (view.actions.includes("cancel")) controls.append(commandButton("cancel", "取消决策", "danger"));
+  if (view.actions.includes("run")) {
+    const deferred = element("button", "command-button deferred", "运行将在 D4b-2 接入");
+    deferred.type = "button";
+    deferred.disabled = true;
+    controls.append(deferred);
+  }
+  section.append(code, copy, controls);
   return section;
+}
+
+function commandButton(action, label, style) {
+  const button = element("button", `command-button ${style}`, label);
+  button.type = "button";
+  button.dataset.command = action;
+  return button;
 }
 
 function panel(index, title, className = "") {
@@ -252,6 +274,8 @@ function bind() {
     status.textContent = "正在读取权威 DecisionView…";
     try {
       const payload = await loadDecision(form.elements.decision_id.value.trim(), form.elements.version.value, form.elements.token.value, controller.signal);
+      currentToken = form.elements.token.value;
+      pendingIntent = null;
       renderWorkspace(root, payload);
       status.textContent = "已从 MAGI API 同步；令牌仍只保留在页面内存。";
     } catch (error) {
@@ -260,6 +284,79 @@ function bind() {
     } finally {
       clearTimeout(timer);
       button.disabled = false;
+    }
+  });
+  root.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-command]");
+    if (button) openCommandDialog(button.dataset.command);
+  });
+  bindCommandDialog(root, status);
+}
+
+function openCommandDialog(action) {
+  const dialog = document.querySelector("#command-dialog");
+  const presentation = commandPresentation(action);
+  if (pendingIntent && pendingIntent.action !== action) {
+    const status = document.querySelector("#status-message");
+    status.className = "status-message error";
+    status.textContent = "已有结果未知的命令等待安全重试或放弃，不能创建另一条命令。";
+    return;
+  }
+  dialogAction = action;
+  setText("#command-dialog-title", presentation.title);
+  setText("#command-consequence", presentation.consequence);
+  setText("#command-target", `${currentView.decisionId} / V${currentView.version}`);
+  const reasonField = document.querySelector("#cancel-reason-field");
+  const reason = document.querySelector("#cancel-reason");
+  reasonField.hidden = action !== "cancel";
+  reason.disabled = Boolean(pendingIntent);
+  document.querySelector("#command-retry-note").hidden = !pendingIntent;
+  document.querySelector("#command-abandon").hidden = !pendingIntent;
+  document.querySelector("#command-submit").textContent = pendingIntent ? "使用相同幂等键重试" : "确认执行";
+  if (!pendingIntent) reason.value = "";
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.setAttribute("open", "");
+}
+
+function bindCommandDialog(root, status) {
+  const dialog = document.querySelector("#command-dialog");
+  const form = document.querySelector("#command-form");
+  document.querySelector("#command-close").addEventListener("click", () => dialog.close());
+  document.querySelector("#command-abandon").addEventListener("click", () => {
+    pendingIntent = null;
+    dialog.close();
+    status.className = "status-message";
+    status.textContent = "已放弃本地待重试命令；服务端状态将在下次同步时确认。";
+  });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.querySelector("#command-submit");
+    if (!pendingIntent) {
+      pendingIntent = createCommandIntent(dialogAction, currentView, {
+        reason: document.querySelector("#cancel-reason").value,
+      });
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    submit.disabled = true;
+    status.className = "status-message";
+    status.textContent = `${dialogAction === "confirm" ? "确认" : "取消"}命令正在提交…`;
+    try {
+      const payload = await executeCommand(pendingIntent, currentToken, controller.signal);
+      pendingIntent = null;
+      renderWorkspace(root, payload);
+      status.textContent = "命令已由 MAGI API 接受，工作区已同步到返回状态。";
+      dialog.close();
+    } catch (error) {
+      status.className = "status-message error";
+      status.textContent = error.name === "AbortError" ? "请求结果未知；请使用相同幂等键重试，或重新同步状态。" : safeText(error.message);
+      document.querySelector("#command-retry-note").hidden = false;
+      document.querySelector("#command-abandon").hidden = false;
+      document.querySelector("#cancel-reason").disabled = true;
+      submit.textContent = "使用相同幂等键重试";
+    } finally {
+      clearTimeout(timer);
+      submit.disabled = false;
     }
   });
 }

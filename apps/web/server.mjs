@@ -3,15 +3,17 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { isAllowedDecisionApiPath, upstreamPath } from "./proxy-contract.mjs";
+import { isAllowedApiOperation, upstreamPath } from "./proxy-contract.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.MAGI_WEB_PORT || "3000");
 const upstream = new URL(process.env.MAGI_API_URL || "http://127.0.0.1:8000");
 const maxResponseBytes = 1_000_000;
+const maxCommandBytes = 10_000;
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
   ["/workspace.mjs", ["workspace.mjs", "text/javascript; charset=utf-8"]],
+  ["/commands.mjs", ["commands.mjs", "text/javascript; charset=utf-8"]],
   ["/report.mjs", ["report.mjs", "text/javascript; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
   ["/assets/magi-mark.svg", ["prototypes/assets/magi-fallback-mark.svg", "image/svg+xml"]],
@@ -46,7 +48,7 @@ createServer(async (request, response) => {
       response.end(body);
       return;
     }
-    if (request.method === "GET" && isAllowedDecisionApiPath(requestUrl.pathname)) {
+    if (isAllowedApiOperation(request.method || "", requestUrl.pathname)) {
       await proxyDecisionResource(request, response, requestUrl);
       return;
     }
@@ -61,16 +63,38 @@ createServer(async (request, response) => {
 });
 
 async function proxyDecisionResource(request, response, requestUrl) {
-  const target = new URL(upstreamPath(requestUrl), upstream);
+  const method = request.method || "GET";
+  const target = new URL(upstreamPath(requestUrl, method), upstream);
   const headers = { accept: "application/json" };
   if (request.headers.authorization) headers.authorization = request.headers.authorization;
-  const upstreamResponse = await fetch(target, { headers, redirect: "error", cache: "no-store" });
+  const init = { method, headers, redirect: "error", cache: "no-store" };
+  if (method === "POST") {
+    headers["content-type"] = "application/json";
+    if (request.headers["idempotency-key"]) {
+      headers["idempotency-key"] = request.headers["idempotency-key"];
+    }
+    init.body = await boundedRequestBody(request);
+  }
+  const upstreamResponse = await fetch(target, init);
   const body = await boundedBody(upstreamResponse);
   response.writeHead(upstreamResponse.status, {
     ...securityHeaders,
     "content-type": upstreamResponse.headers.get("content-type") || "application/json",
   });
   response.end(body);
+}
+
+async function boundedRequestBody(request) {
+  const declared = Number(request.headers["content-length"] || "0");
+  if (declared > maxCommandBytes) throw new Error("command request exceeds limit");
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of request) {
+    total += chunk.length;
+    if (total > maxCommandBytes) throw new Error("command request exceeds limit");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks, total);
 }
 
 async function boundedBody(upstreamResponse) {

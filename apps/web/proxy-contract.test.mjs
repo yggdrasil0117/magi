@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isAllowedDecisionApiPath, upstreamPath } from "./proxy-contract.mjs";
+import { isAllowedApiOperation, isAllowedDecisionApiPath, upstreamPath } from "./proxy-contract.mjs";
 
 const id = "11111111-1111-4111-8111-111111111111";
 
@@ -27,5 +27,21 @@ test("proxy strips the local API prefix and retains only query parameters", () =
   assert.throws(
     () => upstreamPath(new URL(`/api/v1/decisions/${id}?version=0`, "http://localhost")),
     /version is invalid/,
+  );
+});
+
+test("proxy permits only confirm and cancel mutations", () => {
+  assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/confirm`), true);
+  assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/cancel`), true);
+  assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/run`), false);
+  assert.equal(isAllowedApiOperation("POST", "/api/v1/decisions"), false);
+  assert.equal(isAllowedApiOperation("GET", `/api/v1/decisions/${id}/confirm`), false);
+  assert.equal(
+    upstreamPath(new URL(`/api/v1/decisions/${id}/confirm`, "http://localhost"), "POST"),
+    `/v1/decisions/${id}/confirm`,
+  );
+  assert.throws(
+    () => upstreamPath(new URL(`/api/v1/decisions/${id}/cancel?version=1`, "http://localhost"), "POST"),
+    /query|Mutation/,
   );
 });

@@ -1,10 +1,12 @@
 # Web decision workspace
 
-UI-D4a upgrades `/` from the M3 report-only surface to a real read-only
+UI-D4a upgrades `/` from the M3 report-only surface to a real
 `DecisionView` workspace. Enter a known decision ID, version, and bearer token to
 render authoritative case, evidence, disclosed perspectives, available actions,
-and the final report. The token stays in page memory. The page does not fabricate
-an inbox or issue mutations before their UI-D4b confirmation design is accepted.
+and the final report. UI-D4b-1 adds confirm and cancel only when declared by
+`available_actions`; both use a consequence dialog, second confirmation, frozen
+in-memory idempotency intent, and same-key retry. The token stays in page memory.
+The page does not fabricate an inbox, create permission, or run behavior.
 
 ## UI-D2 design fixture
 
@@ -37,6 +39,6 @@ decision and final-report reads, so the production API does not need a permissiv
 CORS policy. Static and proxied responses include a restrictive CSP and no-store
 headers.
 
-Mutation workflows, authorized inbox, history, and revision comparison remain
-separate UI-D4 increments because the required contracts and confirmation behavior
-must be accepted independently.
+Create/run, authorized inbox, history, and revision comparison remain separate
+UI-D4 increments because long-running and discovery contracts must be accepted
+independently.

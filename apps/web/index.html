@@ -48,7 +48,20 @@
       <div class="asset-slot"><span>OPTIONAL LICENSED SLOT</span><strong>CONTEXT ART / FRAME</strong><p>当前生产基础层使用中性回退，不请求第三方素材。</p></div>
     </aside>
   </div>
-  <footer><span>UI-D4A</span><span>DECISIONVIEW 1.0</span><span>API 0.3.0</span><span>READ-ONLY PRODUCTION FOUNDATION</span></footer>
+  <dialog id="command-dialog" class="command-dialog" aria-labelledby="command-dialog-title">
+    <form id="command-form">
+      <div class="dialog-index"><span>COMMAND CONFIRMATION</span><b>02</b></div>
+      <div class="dialog-content">
+        <code id="command-target"></code>
+        <h2 id="command-dialog-title">确认命令</h2>
+        <p id="command-consequence"></p>
+        <label id="cancel-reason-field" hidden><span>取消原因（可选）</span><textarea id="cancel-reason" maxlength="2000" rows="3"></textarea></label>
+        <p id="command-retry-note" class="retry-note" hidden>上一次请求的结果未知。本次重试将使用完全相同的请求体和幂等键，不会创建第二条命令。</p>
+        <div class="dialog-actions"><button id="command-close" type="button" class="dialog-button ghost">返回检查</button><button id="command-abandon" type="button" class="dialog-button ghost" hidden>放弃待重试</button><button id="command-submit" type="submit" class="dialog-button primary">确认执行</button></div>
+      </div>
+    </form>
+  </dialog>
+  <footer><span>UI-D4B-1</span><span>DECISIONVIEW 1.0</span><span>API 0.3.0</span><span>CONFIRM / CANCEL COMMANDS</span></footer>
   <script type="module" src="/workspace.mjs"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 # UI-D4 production implementation plan
 
-Status: UI-D4a implemented; UI-D4b pending confirmation
+Status: UI-D4a accepted; UI-D4b-1 implemented; UI-D4b-2 pending confirmation
 
 ## Scope rule
 
@@ -81,3 +81,24 @@ Before adding mutations, confirm this split:
 
 This prevents a short browser timeout from being mistaken for command failure and
 then issuing a second model run under a new key.
+
+## UI-D4b-1 implementation
+
+UI-D4b-1 is implemented with these boundaries:
+
+- only `confirm` and `cancel` controls declared by `available_actions` are active;
+- every mutation opens a modal with the decision/version and plain-language effect;
+- confirm freezes one timezone-aware timestamp and explicitly does not start models;
+- cancel accepts an optional reason, trims control characters, and preserves history;
+- the browser creates a cryptographically random in-memory idempotency key per
+  confirmed intent and freezes its request body;
+- a timeout or unknown outcome retains that exact key and body for retry; the user
+  may abandon the local retry only after being told to resynchronize server state;
+- a different mutation cannot be created while an unknown intent remains pending;
+- the loopback proxy permits POST only for UUID-scoped `confirm` and `cancel`, caps
+  request bodies at 10 KB, and continues to reject create and run;
+- successful commands render the returned `DecisionView` immediately.
+
+UI-D4b-2 remains blocked on a product/API choice for long-running create and run:
+keep a synchronous HTTP request open, or add an accepted command receipt plus
+public event/status replay. The latter remains recommended for reconnect safety.
