@@ -20,7 +20,7 @@ Exit criterion: all arbitration outcomes are reproducible from fixtures.
 
 ## M2: Three perspectives
 
-Status: M2a implemented; runtime smoke test awaiting the LangGraph dependency.
+Status: M2a and M2b-1 implemented and locally verified.
 
 - Add LangGraph Graph API orchestration and PostgreSQL checkpointing.
 - Implement Coordinator.
@@ -30,7 +30,9 @@ Status: M2a implemented; runtime smoke test awaiting the LangGraph dependency.
 
 Exit criterion: first-round secrecy and one accepted ballot per perspective are covered by integration tests.
 
-M2a currently uses a scripted perspective runner and in-memory checkpointer. M2b will add real model agents and PostgreSQL checkpointing.
+M2a provides the tested graph and scripted runner. M2b-1 adds three isolated
+LangChain/OpenAI structured-output boundaries and loads the shared plus assigned
+perspective skills. Live API evaluation and PostgreSQL checkpointing remain.
 
 ## M3: Cross-review
 

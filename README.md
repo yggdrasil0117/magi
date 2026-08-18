@@ -6,6 +6,8 @@ M1 includes the framework-independent decision domain, lifecycle state machine, 
 
 M2a adds a LangGraph Graph API builder, JSON-serializable checkpoint state, confirmation interrupt, parallel first and review branches, scripted perspective runner, and sanitized public-event projection. The executable LangGraph interrupt/resume integration path is verified with LangGraph 1.2.11.
 
+M2b-1 adds a LangChain/OpenAI structured-output runner. Each LangGraph perspective node loads the shared MAGI protocol and exactly one perspective skill, receives an isolated prompt, and returns a ballot draft. Application code seals authoritative identity, round, decision, option, and evidence boundaries.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -37,3 +39,4 @@ tests/         Unit, integration, evaluation, and fixture areas
 ~~~
 
 Start with docs/architecture.md, docs/m1-implementation.md, and docs/m2a-implementation.md.
+The current model-adapter increment is documented in docs/m2b1-implementation.md.

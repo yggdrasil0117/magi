@@ -60,7 +60,7 @@
 
 ## M2b
 
-- 接入真实 OpenAI Agents SDK 人格
+- 接入 LangChain/OpenAI 结构化输出人格
 - 使用 PostgreSQL Checkpointer
 - 增加模型调用幂等键、重试和审计
 - 将 LangGraph Stream 转换为 WebSocket 事件

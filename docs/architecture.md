@@ -142,7 +142,7 @@ Do not store hidden chain-of-thought. Store concise rationale, assumptions, evid
 
 ## Initial deployment
 
-- Python 3.12, FastAPI, Pydantic, OpenAI Agents SDK, and Responses API.
+- Python 3.12, FastAPI, Pydantic, and OpenAI Responses API through LangChain OpenAI.
 - LangGraph Graph API and a durable PostgreSQL checkpointer from M2.
 - PostgreSQL with SQLAlchemy and Alembic.
 - Next.js Web client.

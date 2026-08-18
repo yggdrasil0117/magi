@@ -59,7 +59,7 @@ The real graph integration test passes for interrupt, checkpoint resume, paralle
 
 ## M2b
 
-- Replace ScriptedPerspectiveRunner with OpenAI Agents SDK adapters.
+- Add the LangChain/OpenAI structured-output perspective adapter.
 - Add PostgreSQL checkpointer using thread ID decision_id:version.
 - Persist append-only DecisionRecord separately from checkpoints.
 - Convert graph stream updates into authenticated WebSocket events.
