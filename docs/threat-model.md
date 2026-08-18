@@ -54,6 +54,9 @@ Trusted only after validation:
 | Client chooses decision or evidence identity | Derive decision ID from principal and idempotency key; assign evidence IDs in application code |
 | Client marks supplied evidence verified | Seal supplied evidence as user-asserted and calculate content hashes server-side |
 | Create retry duplicates work or changes normalization | Reuse a deterministic principal-scoped decision ID and validate a checkpointed preparation fingerprint before Coordinator invocation |
+| Readiness leaks infrastructure detail | Return only ready/not-ready and suppress database exception text |
+| Dependency failure receives traffic | Require the application binding and a bounded PostgreSQL probe before reporting ready |
+| Automated test triggers paid model calls | Require the explicit `MAGI_RUN_M2_LIVE=1` opt-in flag |
 | Secret exposure | Keep credentials in the server-side gateway; never place them in prompts |
 | Duplicate run | Require idempotency keys and stage transition guards |
 | Retry counted as another vote | Reference attempts in audit; count one accepted ballot per agent and round |

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "magi-decision-system"
-version = "0.2.0b9"
+version = "0.2.0"
 description = "Three-perspective decision support with deterministic arbitration"
 requires-python = ">=3.12"
 dependencies = [

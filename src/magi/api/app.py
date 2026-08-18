@@ -72,12 +72,17 @@ class DecisionApiService(Protocol):
     ) -> DecisionView: ...
 
 
+class ReadinessProbe(Protocol):
+    async def is_ready(self) -> bool: ...
+
+
 def create_app(
     service: DecisionApiService,
     authorizer: DecisionAuthorizer,
     *,
     idempotency_store: CommandIdempotencyStore | None = None,
     lifespan: Callable[[FastAPI], AbstractAsyncContextManager[None]] | None = None,
+    readiness_probe: ReadinessProbe | None = None,
 ) -> FastAPI:
     """Create an API app with mandatory authentication and authorization ports."""
 
@@ -217,6 +222,19 @@ def create_app(
     @app.get("/healthz", include_in_schema=False)
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/readyz", include_in_schema=False)
+    async def readiness() -> JSONResponse:
+        ready = False
+        if readiness_probe is not None:
+            try:
+                ready = await readiness_probe.is_ready()
+            except Exception:
+                ready = False
+        return JSONResponse(
+            status_code=200 if ready else 503,
+            content={"status": "ready" if ready else "not_ready"},
+        )
 
     @app.post(
         "/v1/decisions",

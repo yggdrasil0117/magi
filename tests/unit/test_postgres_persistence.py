@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import unittest
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timezone
@@ -80,6 +81,17 @@ class FakePool:
     def connection(self) -> AsyncContext:
         self.checkouts += 1
         return AsyncContext(self.connection_value)
+
+
+class FailingConnection(FakeConnection):
+    async def execute(self, query: str, params: object | None = None) -> FakeCursor:
+        raise RuntimeError("secret database detail")
+
+
+class SlowConnection(FakeConnection):
+    async def execute(self, query: str, params: object | None = None) -> FakeCursor:
+        await asyncio.sleep(0.05)
+        return await super().execute(query, params)
 
 
 def invocation_record() -> ModelInvocationRecord:
@@ -162,6 +174,26 @@ class PostgresInvocationLedgerTests(unittest.IsolatedAsyncioTestCase):
                 "postgresql://magi:example@127.0.0.1:5432/magi",
                 max_size=1,
             )
+
+
+class PostgresReadinessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_probe_is_bounded_fail_closed_and_executes_select(self) -> None:
+        runtime = object.__new__(PostgresPersistenceRuntime)
+        connection = FakeConnection({})
+        runtime.pool = FakePool(connection)  # type: ignore[assignment]
+        runtime._opened = True
+
+        self.assertTrue(await runtime.is_ready(timeout_seconds=0.1))
+        self.assertEqual(connection.calls[-1], ("SELECT 1", None))
+
+        runtime._opened = False
+        self.assertFalse(await runtime.is_ready(timeout_seconds=0.1))
+        runtime._opened = True
+        runtime.pool = FakePool(FailingConnection({}))  # type: ignore[assignment]
+        self.assertFalse(await runtime.is_ready(timeout_seconds=0.1))
+        runtime.pool = FakePool(SlowConnection({}))  # type: ignore[assignment]
+        self.assertFalse(await runtime.is_ready(timeout_seconds=0.001))
+        self.assertFalse(await runtime.is_ready(timeout_seconds=0))
 
 
 class PostgresCommandIdempotencyTests(unittest.IsolatedAsyncioTestCase):

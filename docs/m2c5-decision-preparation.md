@@ -96,10 +96,9 @@ claims, or promote evidence to `verified`.
 - Production composition constructs and injects the Coordinator.
 - The complete suite runs 117 tests: 115 pass and 2 expected tests skip locally.
 
-## Remaining M2 work
+## M2 closure
 
-One increment remains: M2c-6 acceptance closure. It will exercise a configured
-PostgreSQL instance and controlled OpenAI smoke case, add database-aware
-readiness, and freeze the M2 acceptance record. Editable drafts and the separate
-prepare route are product-surface additions, not blockers for the M2 three-
-perspective exit criterion.
+M2c-6 completes the M2 code and local acceptance scope with database-aware
+readiness and an opt-in real-service acceptance flow. Editable drafts and the
+separate prepare route remain product-surface additions, not blockers for the
+M2 three-perspective exit criterion.

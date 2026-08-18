@@ -24,6 +24,8 @@ M2c-4b adds the fail-closed production FastAPI factory. Its lifespan owns the sh
 
 M2c-5 adds authenticated, idempotent decision creation. The non-voting Coordinator normalizes the raw question, application code seals retry-stable identity and user-asserted evidence, and the new workflow pauses at the existing confirmation gate before any perspective model runs.
 
+M2c-6 closes M2 at version 0.2.0 with a bounded PostgreSQL-aware readiness probe, an explicitly enabled real-service acceptance flow, and a frozen acceptance matrix. Local implementation acceptance passes; deployment smoke remains environment-gated.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -63,3 +65,4 @@ The initial HTTP transport is documented in docs/m2c3-fastapi-transport.md.
 Durable API command idempotency is documented in docs/m2c4a-postgres-command-idempotency.md.
 Production composition is documented in docs/m2c4b-production-composition.md.
 Coordinator-backed creation is documented in docs/m2c5-decision-preparation.md.
+M2 acceptance closure is documented in docs/m2c6-acceptance-closure.md.

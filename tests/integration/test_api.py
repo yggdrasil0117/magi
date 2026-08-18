@@ -113,6 +113,17 @@ class FakeAuthorizer:
             raise ApiAuthorizationError("private policy detail")
 
 
+class FakeReadinessProbe:
+    def __init__(self, ready: bool = True) -> None:
+        self.ready = ready
+        self.error: Exception | None = None
+
+    async def is_ready(self) -> bool:
+        if self.error is not None:
+            raise self.error
+        return self.ready
+
+
 class FastApiAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
         self.service = FakeDecisionService()
@@ -142,6 +153,28 @@ class FastApiAdapterTests(unittest.TestCase):
         response = self.client.get("/healthz")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
+
+    def test_readiness_is_fail_closed_and_sanitized(self) -> None:
+        unavailable = self.client.get("/readyz")
+        self.assertEqual(unavailable.status_code, 503)
+        self.assertEqual(unavailable.json(), {"status": "not_ready"})
+
+        probe = FakeReadinessProbe()
+        client = TestClient(
+            create_app(
+                self.service,
+                self.authorizer,
+                readiness_probe=probe,
+            ),
+            raise_server_exceptions=False,
+        )
+        self.assertEqual(client.get("/readyz").json(), {"status": "ready"})
+
+        probe.error = RuntimeError("secret database connection detail")
+        failed = client.get("/readyz")
+        self.assertEqual(failed.status_code, 503)
+        self.assertEqual(failed.json(), {"status": "not_ready"})
+        self.assertNotIn("secret database connection detail", failed.text)
 
     def test_read_requires_authentication_and_per_decision_authorization(self) -> None:
         missing = self.client.get(self.path())

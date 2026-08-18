@@ -11,6 +11,7 @@ there is intentionally no unauthenticated default application.
 Implemented routes:
 
 - `GET /healthz`
+- `GET /readyz`
 - `POST /v1/decisions`
 - `GET /v1/decisions/{decision_id}`
 - `POST /v1/decisions/{decision_id}/confirm`
@@ -30,3 +31,8 @@ M2c-5 makes `POST /v1/decisions` an atomic create-and-prepare command. It invoke
 the non-voting Coordinator, seals supplied evidence as user-asserted, and pauses
 at confirmation. Editable drafts, a separate prepare route, history, reports,
 and WebSocket events remain separate increments.
+
+M2c-6 adds database-aware readiness. `/healthz` reports only that the process is
+alive. `/readyz` returns 200 only after the application service is bound and the
+shared PostgreSQL runtime completes a bounded probe; otherwise it returns a
+sanitized 503 response.

@@ -18,6 +18,8 @@ scoped by the authenticated principal.
 
 | Method and path | Purpose |
 |---|---|
+| GET /healthz | Process liveness without dependency claims |
+| GET /readyz | Application and PostgreSQL readiness |
 | POST /v1/decisions | Create a draft |
 | GET /v1/decisions/{id} | Read DecisionView |
 | PATCH /v1/decisions/{id} | Edit an unfrozen case |
@@ -42,6 +44,11 @@ server derives a stable decision ID from the authenticated principal and
 idempotency key so a retry after partial persistence returns to the same
 workflow thread. Clients cannot provide decision IDs, evidence IDs, hashes, or
 verification status during creation.
+
+Health routes do not require bearer authentication and reveal no connection
+details. `/readyz` returns `{"status":"ready"}` with status 200 only when the
+production service is bound and PostgreSQL answers within the bounded probe.
+All other states return status 503 with `{"status":"not_ready"}`.
 
 ## Error envelope
 

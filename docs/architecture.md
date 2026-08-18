@@ -87,6 +87,10 @@ opens and closes the shared PostgreSQL pool, and the process does not accept
 requests unless persistence, skills, model runners, and LangGraph all compose
 successfully.
 
+Liveness and readiness are separate. Liveness does not query dependencies.
+Readiness requires both a bound application service and a successful bounded
+PostgreSQL query; failure details remain server-side.
+
 ### Arbiter
 
 Apply decision-protocol.md using ordinary application code. Produce one ArbitrationResult and retain all referenced ballots. Do not use a judging model.

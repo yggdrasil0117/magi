@@ -1,6 +1,6 @@
 """FastAPI adapter and transport-level contracts."""
 
-from .app import DecisionApiService, create_app
+from .app import DecisionApiService, ReadinessProbe, create_app
 from .auth import (
     ApiAuthenticationError,
     ApiAuthorizationError,
@@ -41,6 +41,7 @@ __all__ = [
     "HashedBearerPolicy",
     "ProductionConfigurationError",
     "ProductionSettings",
+    "ReadinessProbe",
     "RunDecisionCommand",
     "SuppliedEvidenceCommand",
     "create_app",

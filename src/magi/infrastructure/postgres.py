@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
 from collections.abc import Awaitable, Callable, Mapping
@@ -329,6 +330,19 @@ class PostgresPersistenceRuntime:
         self._checkpointer = None
         self._opened = False
         await self.pool.close()
+
+    async def is_ready(self, *, timeout_seconds: float = 2.0) -> bool:
+        """Return whether the opened pool can execute a bounded probe query."""
+
+        if not self._opened or timeout_seconds <= 0:
+            return False
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                async with self.pool.connection() as connection:
+                    await connection.execute("SELECT 1")
+        except Exception:
+            return False
+        return True
 
     async def __aenter__(self) -> PostgresPersistenceRuntime:
         await self.open()

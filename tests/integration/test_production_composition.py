@@ -34,6 +34,8 @@ class FakeRuntime:
         self._checkpointer = object()
         self.open_calls: list[bool] = []
         self.closed = False
+        self.ready = True
+        self.readiness_timeouts: list[float] = []
 
     @property
     def checkpointer(self) -> object:
@@ -46,6 +48,10 @@ class FakeRuntime:
 
     async def close(self) -> None:
         self.closed = True
+
+    async def is_ready(self, *, timeout_seconds: float = 2.0) -> bool:
+        self.readiness_timeouts.append(timeout_seconds)
+        return self.ready
 
 
 class EmptyGraph:
@@ -126,6 +132,11 @@ class ProductionCompositionTests(unittest.TestCase):
             self.assertFalse(runtime.closed)
             self.assertEqual(app.state.magi_model, "test-model")
             self.assertEqual(client.get("/healthz").json(), {"status": "ok"})
+            self.assertEqual(client.get("/readyz").json(), {"status": "ready"})
+            runtime.ready = False
+            unavailable = client.get("/readyz")
+            self.assertEqual(unavailable.status_code, 503)
+            self.assertEqual(unavailable.json(), {"status": "not_ready"})
             response = client.get(
                 f"/v1/decisions/{DECISION_ID}",
                 headers={"Authorization": f"Bearer {TOKEN}"},
@@ -133,6 +144,7 @@ class ProductionCompositionTests(unittest.TestCase):
             self.assertEqual(response.status_code, 404)
 
         self.assertTrue(runtime.closed)
+        self.assertEqual(runtime.readiness_timeouts, [2.0, 2.0])
         self.assertIs(observed["settings"], self.settings)
         self.assertIs(observed["ledger"], runtime.invocation_ledger)
         self.assertEqual(observed["runner"], "runner")

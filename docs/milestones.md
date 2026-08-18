@@ -20,8 +20,8 @@ Exit criterion: all arbitration outcomes are reproducible from fixtures.
 
 ## M2: Three perspectives
 
-Status: M2a through M2c-5 implemented and locally verified; one acceptance
-increment remains.
+Status: implemented and locally accepted at version 0.2.0. Live deployment
+smoke remains explicitly environment-gated.
 
 - Add LangGraph Graph API orchestration and PostgreSQL checkpointing.
 - Implement Coordinator.
@@ -56,8 +56,12 @@ shared runtime, startup skill validation, and a concrete hashed bearer policy
 with explicit action and decision allowlists.
 M2c-5 adds authenticated idempotent decision creation, production Coordinator
 composition, application-owned evidence sealing, and a confirmation pause
-before any perspective model call. M2c-6 is the remaining M2 acceptance and
-live-integration increment.
+before any perspective model call.
+M2c-6 adds bounded database-aware readiness, an opt-in real PostgreSQL/OpenAI
+end-to-end acceptance test, and the frozen M2 acceptance matrix. The local M2
+implementation exit criterion passes; the current workstation has no database,
+Docker, or OpenAI configuration, so deployment smoke is recorded as pending
+rather than passed.
 
 ## M3: Cross-review
 

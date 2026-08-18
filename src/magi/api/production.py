@@ -121,6 +121,8 @@ class ProductionPersistence(Protocol):
 
     async def close(self) -> None: ...
 
+    async def is_ready(self, *, timeout_seconds: float = 2.0) -> bool: ...
+
 
 class _DeferredDecisionService:
     """Bind the application service only after persistence startup succeeds."""
@@ -135,6 +137,10 @@ class _DeferredDecisionService:
 
     def unbind(self) -> None:
         self._delegate = None
+
+    @property
+    def ready(self) -> bool:
+        return self._delegate is not None
 
     def _service(self) -> DecisionApiService:
         if self._delegate is None:
@@ -179,6 +185,21 @@ GraphFactory = Callable[[PerspectiveRunner, Any], DecisionGraph]
 CoordinatorFactory = Callable[[ProductionSettings], DecisionNormalizer]
 
 
+class _ProductionReadinessProbe:
+    def __init__(
+        self,
+        runtime: ProductionPersistence,
+        service: _DeferredDecisionService,
+    ) -> None:
+        self._runtime = runtime
+        self._service = service
+
+    async def is_ready(self) -> bool:
+        if not self._service.ready:
+            return False
+        return await self._runtime.is_ready(timeout_seconds=2.0)
+
+
 def create_production_app(
     settings: ProductionSettings | None = None,
     *,
@@ -200,6 +221,7 @@ def create_production_app(
     selected_coordinator_factory = coordinator_factory or _build_coordinator
     runtime = selected_runtime_factory(selected_settings)
     deferred_service = _DeferredDecisionService()
+    readiness_probe = _ProductionReadinessProbe(runtime, deferred_service)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -226,6 +248,7 @@ def create_production_app(
         selected_authorizer,
         idempotency_store=runtime.command_idempotency_store,
         lifespan=lifespan,
+        readiness_probe=readiness_probe,
     )
 
 
