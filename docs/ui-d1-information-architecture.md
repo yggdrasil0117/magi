@@ -1,6 +1,6 @@
 # UI-D1: User journeys and information architecture
 
-Status: proposed, pending confirmation
+Status: proposed; visual-direction decision confirmed, structural decisions pending
 
 ## Scope and decisions
 
@@ -224,7 +224,8 @@ production behavior.
 2. Adopt five workspace sections: Overview, Evidence, Perspectives, Report, Audit.
 3. Keep confirmation and explicit run as separate screens/actions.
 4. Show released first-round ballots during cross-review only as clearly preliminary.
-5. Treat the current dark MAGI report page as a reference, not a frozen visual style.
+5. Confirmed by product direction: use an original EVA/MAGI-inspired command
+   interface under the constraints in `docs/ui-visual-direction-eva.md`.
 
-Once these five decisions are confirmed, UI-D1 becomes accepted and UI-D2 can
-produce Web and terminal wireframes without revisiting navigation scope.
+Once decisions 1–4 are confirmed, UI-D1 becomes accepted and UI-D2 can produce Web
+and terminal wireframes without revisiting navigation scope or visual intent.

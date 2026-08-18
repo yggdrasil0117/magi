@@ -1,6 +1,6 @@
 # MAGI UI/UX delivery plan
 
-Status: UI-D1 proposed and pending confirmation
+Status: UI-D1 structure pending confirmation; EVA-inspired visual direction required
 
 ## Product objective
 
@@ -65,6 +65,11 @@ and first-load states receive distinct copy and recovery actions.
 - Content: concise Chinese first, with layouts tested for English expansion and
   machine identifiers that must not wrap ambiguously.
 
+Visual direction is constrained by `docs/ui-visual-direction-eva.md`: an original
+EVA/MAGI-inspired command interface using operational amber, state-only red alerts,
+severe geometry, technical indexing, and three-system composition. Accessibility
+and readability override decorative similarity.
+
 ## Medium-specific behavior
 
 ### Web
@@ -120,7 +125,7 @@ semantic parity from versioned fixtures.
 
 ## Immediate next design decision
 
-Confirm the five decisions at the end of the UI-D1 proposal before producing UI-D2
-wireframes. The current M3 report viewer is a visual reference only: its dark
-technical direction may be retained, softened, or replaced after the information
-architecture is approved.
+Confirm structural decisions 1–4 at the end of the UI-D1 proposal before producing
+UI-D2 wireframes. The visual intent is already constrained to the original
+EVA/MAGI-inspired direction; UI-D2 will translate it into layout without freezing
+final components or styling.
