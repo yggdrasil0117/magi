@@ -20,7 +20,7 @@ Exit criterion: all arbitration outcomes are reproducible from fixtures.
 
 ## M2: Three perspectives
 
-Status: M2a, M2b-1, and M2b-2a implemented and locally verified.
+Status: M2a through M2b-2b implemented and locally verified.
 
 - Add LangGraph Graph API orchestration and PostgreSQL checkpointing.
 - Implement Coordinator.
@@ -32,9 +32,13 @@ Exit criterion: first-round secrecy and one accepted ballot per perspective are 
 
 M2a provides the tested graph and scripted runner. M2b-1 adds three isolated
 LangChain/OpenAI structured-output boundaries and loads the shared plus assigned
-perspective skills. Live API evaluation and PostgreSQL checkpointing remain.
+perspective skills. Controlled live API evaluation remains.
 M2b-2a adds idempotent model calls, bounded transient retries, sanitized attempt
 records, token usage, and latency through a persistence-neutral ledger port.
+M2b-2b adds the PostgreSQL invocation ledger, cross-process advisory locking,
+canonical ballot storage, and `AsyncPostgresSaver` checkpointing. The real
+database restart test is available and runs when `MAGI_TEST_POSTGRES_DSN` is set;
+the current workstation has no local PostgreSQL service, so that test is skipped.
 
 ## M3: Cross-review
 

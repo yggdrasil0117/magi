@@ -23,9 +23,10 @@ repeat call therefore returns the same ballot ID, timestamp, and content. A
 per-key asynchronous lock prevents duplicate provider calls within one runner
 process.
 
-The lock is intentionally process-local. PostgreSQL must provide a unique
-idempotency constraint and transaction or advisory-lock strategy before multiple
-application processes are enabled.
+In M2b-2a the lock was intentionally process-local. M2b-2b replaces this behavior
+when the PostgreSQL ledger is selected: a session advisory lock serializes each
+idempotency key across application processes, while the canonical-ballot table
+enforces uniqueness.
 
 ## Retry classification
 
@@ -75,10 +76,9 @@ error messages, or hidden reasoning.
 - The complete suite runs 55 tests: 54 pass and the missing-LangGraph negative
   test is skipped because LangGraph is installed.
 
-## Remaining M2b work
+## Subsequent M2b work
 
-- Implement the invocation ledger and canonical audit records in PostgreSQL.
-- Add PostgreSQL-backed LangGraph checkpointing.
+- Run the optional restart integration test against a real PostgreSQL instance.
 - Perform controlled live-model evaluation after explicit model selection.
 - Add pricing snapshots and cost calculation after token telemetry is validated
   against live responses.

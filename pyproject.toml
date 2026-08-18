@@ -4,14 +4,16 @@ build-backend = "hatchling.build"
 
 [project]
 name = "magi-decision-system"
-version = "0.2.0b2"
+version = "0.2.0b3"
 description = "Three-perspective decision support with deterministic arbitration"
 requires-python = ">=3.12"
 dependencies = [
   "langchain>=1.3,<2",
   "langchain-openai>=1.5,<2",
   "langgraph>=1.1,<2",
+  "langgraph-checkpoint-postgres>=3.1,<4",
   "pydantic>=2,<3",
+  "psycopg[binary,pool]>=3.3,<4",
   "python-dotenv>=1.2,<2",
 ]
 

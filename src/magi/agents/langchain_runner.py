@@ -177,7 +177,6 @@ class LangChainPerspectiveRunner:
         self._ledger = ledger or InMemoryInvocationLedger()
         self._retry_policy = retry_policy or RetryPolicy()
         self._sleep = sleep
-        self._locks: dict[str, asyncio.Lock] = {}
         missing = set(AgentName) - set(self._models)
         if missing:
             names = ", ".join(sorted(agent.value for agent in missing))
@@ -310,8 +309,7 @@ class LangChainPerspectiveRunner:
         previous_ballot: Ballot | None = None,
     ) -> Ballot:
         prompt_digest, idempotency_key = self._call_keys(agent, messages)
-        lock = self._locks.setdefault(idempotency_key, asyncio.Lock())
-        async with lock:
+        async with self._ledger.guard(idempotency_key):
             cached = await self._ledger.get_ballot(idempotency_key)
             if cached is not None:
                 ballot = Ballot.model_validate(cached)

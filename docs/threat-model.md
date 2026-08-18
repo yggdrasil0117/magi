@@ -42,6 +42,9 @@ Trusted only after validation:
 | Duplicate run | Require idempotency keys and stage transition guards |
 | Retry counted as another vote | Reference attempts in audit; count one accepted ballot per agent and round |
 | Provider error leaks sensitive text | Record only the exception type in model-call telemetry |
+| Unsafe checkpoint deserialization | Use the LangGraph serializer with an explicit safe module allowlist |
+| Cross-process duplicate model call | Serialize each idempotency key with a PostgreSQL advisory lock |
+| Invocation/checkpoint database exposure | Restrict database credentials, network access, and application roles |
 | Presenter changes result | Generate from ArbitrationResult and validate invariant fields |
 | Tool or agent loop | Enforce turn, tool, retry, and review limits in code |
 | Correlated model failure | Preserve independent contexts, use high-risk review, and evaluate representative cases |

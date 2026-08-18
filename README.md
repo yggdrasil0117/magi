@@ -10,11 +10,13 @@ M2b-1 adds a LangChain/OpenAI structured-output runner. Each LangGraph perspecti
 
 M2b-2a adds deterministic model-call idempotency, process-local duplicate suppression, classified retry, `Retry-After` handling, token/latency records, and a replaceable invocation-ledger boundary. Logs contain prompt digests and error types rather than raw prompts or provider error text.
 
+M2b-2b adds a shared PostgreSQL runtime for durable invocation records, canonical ballots, cross-process duplicate suppression, and LangGraph checkpoints. An interrupted decision can resume from the same thread after an application restart.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install langgraph langchain langchain-openai python-dotenv -i https://mirrors.aliyun.com/pypi/simple/
+.\.venv\Scripts\python.exe -m pip install -e . -i https://mirrors.aliyun.com/pypi/simple/
 $env:PYTHONPATH = "src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ~~~
@@ -41,5 +43,5 @@ tests/         Unit, integration, evaluation, and fixture areas
 ~~~
 
 Start with docs/architecture.md, docs/m1-implementation.md, and docs/m2a-implementation.md.
-The current model-adapter increments are documented in docs/m2b1-implementation.md
-and docs/m2b2a-invocation-control.md.
+The current model-adapter increments are documented in docs/m2b1-implementation.md,
+docs/m2b2a-invocation-control.md, and docs/m2b2b-postgres-persistence.md.

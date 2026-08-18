@@ -261,6 +261,29 @@ class LangChainPerspectiveRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(model.inputs), 1)
         self.assertEqual(len(ledger.records), 2)
 
+    async def test_shared_ledger_deduplicates_across_runner_instances(self) -> None:
+        case = make_case()
+        ledger = InMemoryInvocationLedger()
+        model = SequencedStructuredModel((make_draft(),), delay=0.01)
+        first_runner = self.make_controlled_runner(model, ledger)
+        second_runner = self.make_controlled_runner(model, ledger)
+
+        first, second = await asyncio.gather(
+            first_runner.first_ballot(
+                AgentName.MELCHIOR,
+                case,
+                make_snapshot(case),
+            ),
+            second_runner.first_ballot(
+                AgentName.MELCHIOR,
+                case,
+                make_snapshot(case),
+            ),
+        )
+
+        self.assertEqual(first.ballot_id, second.ballot_id)
+        self.assertEqual(len(model.inputs), 1)
+
     async def test_transient_timeout_retries_once_and_records_both_attempts(self) -> None:
         case = make_case()
         ledger = InMemoryInvocationLedger()

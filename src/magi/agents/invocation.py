@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, ClassVar, Protocol
+from typing import Any, AsyncContextManager, AsyncIterator, ClassVar, Protocol
 from uuid import UUID, uuid4
 
 from pydantic import Field, model_validator
@@ -68,7 +70,9 @@ class ModelInvocationRecord(MagiModel):
 
 
 class InvocationLedger(Protocol):
-    """Persistence boundary implemented in memory now and PostgreSQL next."""
+    """Persistence boundary implemented in memory and PostgreSQL."""
+
+    def guard(self, idempotency_key: str) -> AsyncContextManager[None]: ...
 
     async def get_ballot(self, idempotency_key: str) -> Mapping[str, Any] | None: ...
 
@@ -85,10 +89,17 @@ class InMemoryInvocationLedger:
     def __init__(self) -> None:
         self._records: list[ModelInvocationRecord] = []
         self._ballots: dict[str, dict[str, Any]] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
 
     @property
     def records(self) -> tuple[ModelInvocationRecord, ...]:
         return tuple(self._records)
+
+    @asynccontextmanager
+    async def guard(self, idempotency_key: str) -> AsyncIterator[None]:
+        lock = self._locks.setdefault(idempotency_key, asyncio.Lock())
+        async with lock:
+            yield
 
     async def get_ballot(self, idempotency_key: str) -> Mapping[str, Any] | None:
         ballot = self._ballots.get(idempotency_key)
