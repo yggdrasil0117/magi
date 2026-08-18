@@ -119,6 +119,24 @@ the same fields into text-only DOM nodes. The Web development server binds to
 loopback and provides a narrow same-origin report proxy, so production CORS stays
 fail-closed. Full workflow clients remain an M5 concern.
 
+## Interface design contract
+
+UI design is a first-class delivery track rather than a final styling pass. Web,
+TUI, and CLI share API schemas, information priority, state names, permissions,
+and report meaning. They do not share business logic or recalculate status.
+
+The interfaces must make the lifecycle visible: what MAGI knows, what remains
+unknown, whether user confirmation or an explicit run is required, which agents
+have completed without revealing partial votes, and why a result is decisive or
+non-decisive. Dissent, evidence quality, unresolved questions, and audit links
+remain visible rather than being collapsed into one recommendation.
+
+Presentation can adapt to the medium. Web uses responsive spatial hierarchy and
+progressive disclosure; TUI uses keyboard-first panels and concise status lines;
+CLI preserves stable JSON and exit codes. Semantic status cannot depend on color,
+animation, or iconography alone. The shared UI plan and confirmation gates are in
+`docs/ui-design-plan.md`.
+
 ## State machine
 
 ~~~text

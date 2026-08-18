@@ -91,19 +91,44 @@ the browser uses text-only DOM construction and a loopback same-origin proxy.
 The M3 exit criterion is satisfied: majority reports require and retain dissent,
 and every second-round ballot requires an audit reason whether retained or revised.
 
+## UI/UX delivery track
+
+Status: planned as a cross-cutting track for M4 and M5.
+
+- UI-D1: define user journeys, information architecture, and every workflow state.
+- UI-D2: confirm low-fidelity Web and terminal wireframes before visual styling.
+- UI-D3: define shared semantic tokens, components, accessibility, and responsive rules.
+- UI-D4: build production TUI and Web flows against the same API contracts.
+- UI-D5: run usability, keyboard, accessibility, and cross-client parity acceptance.
+
+Each design gate requires review before the next layer is treated as frozen. Web
+and terminal share information priority and state meaning, but each keeps its own
+interaction model; pixel-level imitation between them is not a goal.
+
+Exit criterion: the primary decision journey is usable without hidden state,
+status is never communicated by color alone, every action is keyboard reachable,
+and Web/TUI render the same authoritative decision semantics.
+
 ## M4: Evidence and audit
 
 - Add read-only retrieval gateway.
 - Freeze and hash evidence.
 - Validate citations.
 - Add append-only audit and redaction.
+- Design evidence provenance, citation failure, redaction, and audit-history UI states
+  in parallel through UI-D1 to UI-D3.
 
 Exit criterion: a completed report can be reconstructed from stored records.
 
 ## M5: Clients and evaluation
 
-- Build TUI first, then Web and CLI automation surfaces.
+- Implement the confirmed UI system in TUI first, then Web and CLI automation surfaces.
 - Add history and revision views.
+- Cover loading, empty, waiting, denied, partial, degraded, insufficient, failed,
+  cancelled, and completed states explicitly.
+- Verify responsive layout, keyboard navigation, focus order, reduced motion,
+  contrast, screen-reader labels, and Chinese/English text expansion.
 - Evaluate citation validity, persona differentiation, arbitration consistency, latency, and cost.
 
-Exit criterion: all three clients display the same DecisionView for the same decision ID.
+Exit criterion: all three clients display the same DecisionView for the same
+decision ID, and Web/TUI pass the UI-D5 accessibility and usability gates.
