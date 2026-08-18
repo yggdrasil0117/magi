@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96" role="img" aria-labelledby="title desc">
+  <title id="title">MAGI original fallback mark</title>
+  <desc id="desc">Three offset outlined cells converge around a central decision point.</desc>
+  <g fill="none" stroke="#F2A72B" stroke-width="4">
+    <path d="M15 8h48l12 12v22L63 54H15L4 42V20z"/>
+    <path d="M97 8h48l11 12v22l-11 12H97L85 42V20z"/>
+    <path d="M56 43h48l12 12v21l-12 12H56L44 76V55z"/>
+  </g>
+  <circle cx="80" cy="48" r="7" fill="#FFD36F"/>
+  <path d="M80 35v26M67 48h26" stroke="#070806" stroke-width="2"/>
+</svg>

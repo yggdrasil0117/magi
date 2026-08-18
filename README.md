@@ -89,5 +89,7 @@ The accepted UI-D1 journeys and information architecture are documented in
 docs/ui-d1-information-architecture.md.
 The required EVA/MAGI-inspired visual direction is documented in
 docs/ui-visual-direction-eva.md.
-The UI-D2 Web/TUI wireframe proposal is documented in docs/ui-d2-wireframes.md;
+The accepted UI-D2 Web/TUI wireframes are documented in docs/ui-d2-wireframes.md;
 official-material slots and release gates are defined in docs/ui-asset-governance.md.
+The proposed UI-D3 visual tokens and component contract are documented in
+docs/ui-d3-visual-foundation.md, with a high-fidelity fixture under apps/web/prototypes/.

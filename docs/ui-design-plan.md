@@ -1,6 +1,6 @@
 # MAGI UI/UX delivery plan
 
-Status: UI-D1 accepted; UI-D2 wireframes proposed for confirmation
+Status: UI-D1 and UI-D2 accepted; UI-D3 visual foundation proposed
 
 ## Product objective
 
@@ -115,6 +115,10 @@ Deliver color and typography tokens, spacing, component anatomy, responsive rule
 focus behavior, content guidelines, and representative high-fidelity screens.
 Confirm one visual direction before production component work.
 
+Proposal: `docs/ui-d3-visual-foundation.md`. A representative high-fidelity Web
+fixture lives under `apps/web/prototypes/`; terminal rendering rules are included
+in the same contract.
+
 ### UI-D4: implementation
 
 Build shared contract tests, then TUI workflow, Web workflow, and CLI automation.
@@ -128,5 +132,5 @@ semantic parity from versioned fixtures.
 
 ## Immediate next design decision
 
-Confirm the UI-D2 screen hierarchy, action placement, responsive collapse, and
-official-asset gate before UI-D3 freezes visual tokens and component anatomy.
+Confirm the UI-D3 token palette, component anatomy, density modes, and representative
+screen treatment before UI-D4 production implementation begins.

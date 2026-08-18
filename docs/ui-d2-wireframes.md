@@ -1,6 +1,6 @@
 # UI-D2: Web and terminal wireframes
 
-Status: proposed; awaiting layout confirmation before UI-D3
+Status: accepted; all six UI-D2 decisions confirmed
 
 ## Decisions carried from UI-D1
 
@@ -171,7 +171,7 @@ fixture for inbox, confirmation, run, review, report, and recovery layouts. It u
 only placeholders and synthetic decision data. It does not call the API, imply a
 permission, or ship through the production Web server.
 
-## UI-D2 confirmation requested
+## Confirmed UI-D2 decisions
 
 1. Accept the wide Web three-region shell and single-column responsive order.
 2. Accept the persistent five-section workspace navigation.
@@ -180,5 +180,5 @@ permission, or ship through the production Web server.
 5. Accept optional licensed-asset slots with a fully functional original fallback.
 6. Accept terminal breakpoints and confirm-before-mutation keyboard behavior.
 
-After these six decisions are accepted, UI-D3 can freeze tokens, typography,
-component primitives, exact spacing, focus treatment, and high-fidelity screens.
+These six decisions are frozen. UI-D3 may tune visual expression and component
+anatomy without changing their information order or interaction semantics.

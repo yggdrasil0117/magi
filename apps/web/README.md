@@ -7,6 +7,14 @@ future full decision workspace. Open the file directly in a browser. Its data is
 synthetic, official-material regions are placeholders, and it is deliberately not
 served by the production report proxy.
 
+## UI-D3 visual prototype
+
+`prototypes/ui-d3.html` applies the proposed visual tokens and component contract
+to confirmation, completed-report, and degraded-recovery states. It includes an
+original fallback mark, command/reading density controls, optional licensed-asset
+slots, and responsive behavior. It is also synthetic and excluded from the
+production report proxy.
+
 M3c provides a dependency-free report viewer that consumes the same authenticated
 JSON report as the terminal client. It uses DOM `textContent` for external prose,
 keeps the bearer token only in page memory, and never calculates a vote or status.
