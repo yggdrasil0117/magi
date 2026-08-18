@@ -3,6 +3,7 @@
 import hashlib
 import json
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from typing import Annotated, Protocol
 from uuid import UUID
@@ -69,6 +70,7 @@ def create_app(
     authorizer: DecisionAuthorizer,
     *,
     idempotency_store: CommandIdempotencyStore | None = None,
+    lifespan: Callable[[FastAPI], AbstractAsyncContextManager[None]] | None = None,
 ) -> FastAPI:
     """Create an API app with mandatory authentication and authorization ports."""
 
@@ -77,6 +79,7 @@ def create_app(
         version=__version__,
         docs_url="/docs",
         redoc_url=None,
+        lifespan=lifespan,
     )
     security = HTTPBearer(auto_error=False)
     command_store = idempotency_store or InMemoryCommandIdempotencyStore()

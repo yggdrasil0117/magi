@@ -20,6 +20,8 @@ M2c-3 adds the authenticated FastAPI transport for reading, confirming, running,
 
 M2c-4a adds durable PostgreSQL API-command idempotency. Principal and client keys are stored only as SHA-256 digests, duplicate commands are serialized across processes with advisory locks, and the persisted response is schema-validated before reuse.
 
+M2c-4b adds the fail-closed production FastAPI factory. Its lifespan owns the shared PostgreSQL runtime, loads the three perspective skills, builds the OpenAI runners and LangGraph, injects durable command idempotency, and requires an explicit hashed bearer authorization policy.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -57,3 +59,4 @@ Coordinator normalization is documented in docs/m2c1-coordinator-normalization.m
 The shared application boundary is documented in docs/m2c2-application-service.md.
 The initial HTTP transport is documented in docs/m2c3-fastapi-transport.md.
 Durable API command idempotency is documented in docs/m2c4a-postgres-command-idempotency.md.
+Production composition is documented in docs/m2c4b-production-composition.md.

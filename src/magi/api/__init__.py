@@ -5,6 +5,9 @@ from .auth import (
     ApiAuthenticationError,
     ApiAuthorizationError,
     ApiPrincipal,
+    HashedBearerAuthorizer,
+    HashedBearerCredential,
+    HashedBearerPolicy,
     DecisionAuthorizer,
 )
 from .models import (
@@ -13,6 +16,11 @@ from .models import (
     CancelDecisionCommand,
     ConfirmDecisionCommand,
     RunDecisionCommand,
+)
+from .production import (
+    ProductionConfigurationError,
+    ProductionSettings,
+    create_production_app,
 )
 
 __all__ = [
@@ -25,6 +33,12 @@ __all__ = [
     "ConfirmDecisionCommand",
     "DecisionApiService",
     "DecisionAuthorizer",
+    "HashedBearerAuthorizer",
+    "HashedBearerCredential",
+    "HashedBearerPolicy",
+    "ProductionConfigurationError",
+    "ProductionSettings",
     "RunDecisionCommand",
     "create_app",
+    "create_production_app",
 ]

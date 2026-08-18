@@ -48,6 +48,9 @@ Trusted only after validation:
 | Cross-user idempotency collision | Hash and scope command keys by authenticated principal |
 | API idempotency key leaks from database | Persist only principal and key SHA-256 digests, never raw values |
 | Duplicate command across API processes | Hold a PostgreSQL advisory lock through lookup, execution, and result insertion |
+| Production starts with test adapters | Production factory requires PostgreSQL, OpenAI, skills, and authorization policy; no in-memory fallback |
+| Static bearer token disclosure | Store only SHA-256 digests in policy, compare digests in constant time, and require high-entropy tokens |
+| Over-broad API credential | Bind every subject to explicit actions and decision IDs; all-decisions access requires an explicit flag |
 | Secret exposure | Keep credentials in the server-side gateway; never place them in prompts |
 | Duplicate run | Require idempotency keys and stage transition guards |
 | Retry counted as another vote | Reference attempts in audit; count one accepted ballot per agent and round |

@@ -16,7 +16,14 @@ Implemented routes:
 - `POST /v1/decisions/{decision_id}/run`
 - `POST /v1/decisions/{decision_id}/cancel`
 
-M2c-4a provides `PostgresCommandIdempotencyStore`; the production composition
-root must inject it into `create_app`. Production composition,
-creation/preparation, history, reports, and WebSocket events remain separate
+M2c-4b provides `magi.api.create_production_app`. It opens the shared PostgreSQL
+runtime in the FastAPI lifespan, injects `PostgresCommandIdempotencyStore`,
+builds the OpenAI perspective runner and LangGraph, and requires a hashed bearer
+authorization policy. Start it as an ASGI factory:
+
+~~~powershell
+python -m uvicorn magi.api.production:create_production_app --factory --host 127.0.0.1
+~~~
+
+Creation/preparation, history, reports, and WebSocket events remain separate
 increments.

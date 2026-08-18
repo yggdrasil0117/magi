@@ -20,7 +20,7 @@ Exit criterion: all arbitration outcomes are reproducible from fixtures.
 
 ## M2: Three perspectives
 
-Status: M2a through M2c-4a implemented and locally verified.
+Status: M2a through M2c-4b implemented and locally verified.
 
 - Add LangGraph Graph API orchestration and PostgreSQL checkpointing.
 - Implement Coordinator.
@@ -50,6 +50,9 @@ FastAPI adapter with per-decision authorization, principal-scoped idempotency,
 stable error responses, and transport-to-LangGraph integration coverage.
 M2c-4a adds durable cross-process API-command idempotency to the shared
 PostgreSQL runtime. Raw principals and idempotency keys are never stored.
+M2c-4b adds the fail-closed production ASGI factory, lifecycle ownership of the
+shared runtime, startup skill validation, and a concrete hashed bearer policy
+with explicit action and decision allowlists.
 
 ## M3: Cross-review
 

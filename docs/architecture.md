@@ -78,6 +78,11 @@ Use LangGraph from M2 to run agents concurrently, checkpoint stages, pause for u
 Decision thread identity belongs to the orchestration layer. Infrastructure may
 reuse it, but the application layer does not import PostgreSQL adapters.
 
+The production composition root belongs to the API boundary. FastAPI lifespan
+opens and closes the shared PostgreSQL pool, and the process does not accept
+requests unless persistence, skills, model runners, and LangGraph all compose
+successfully.
+
 ### Arbiter
 
 Apply decision-protocol.md using ordinary application code. Produce one ArbitrationResult and retain all referenced ballots. Do not use a judging model.
