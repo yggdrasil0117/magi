@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal, Protocol
+from typing import Any, AsyncContextManager, Literal, Protocol
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -16,6 +16,10 @@ from magi.domain import DataClassification
 
 class OperationIdempotencyConflict(RuntimeError):
     """Raised when an operation key is reused with another request."""
+
+
+class OperationLeaseLost(RuntimeError):
+    """Raised when a stale worker attempts to mutate an operation."""
 
 
 class OperationStore(Protocol):
@@ -50,6 +54,53 @@ class OperationStore(Protocol):
     ) -> OperationEventPage | None: ...
 
 
+class OperationQueue(Protocol):
+    def claim(
+        self,
+        *,
+        worker_id: str,
+        claimed_at: datetime,
+        lease_seconds: int,
+    ) -> AsyncContextManager[OperationLease | None]: ...
+
+    async def renew(
+        self,
+        lease: OperationLease,
+        *,
+        worker_id: str,
+        renewed_at: datetime,
+        lease_seconds: int,
+    ) -> OperationLease: ...
+
+    async def advance(
+        self,
+        lease: OperationLease,
+        *,
+        worker_id: str,
+        stage: OperationStage,
+        message_code: str,
+        occurred_at: datetime,
+    ) -> OperationReceipt: ...
+
+    async def succeed(
+        self,
+        lease: OperationLease,
+        *,
+        worker_id: str,
+        result: Any,
+        completed_at: datetime,
+    ) -> OperationReceipt: ...
+
+    async def fail(
+        self,
+        lease: OperationLease,
+        *,
+        worker_id: str,
+        failure_code: str,
+        completed_at: datetime,
+    ) -> OperationReceipt: ...
+
+
 class OperationKind(StrEnum):
     CREATE_DECISION = "create_decision"
     RUN_DECISION = "run_decision"
@@ -78,6 +129,25 @@ class OperationEventType(StrEnum):
     STAGE_CHANGED = "stage_changed"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+
+
+class OperationLease(MagiModel):
+    """Private execution capability protected by a monotonically increasing token."""
+
+    operation_id: UUID
+    kind: OperationKind
+    decision_id: UUID
+    decision_version: int = Field(ge=1)
+    classification: DataClassification
+    request_payload: dict[str, Any]
+    fencing_token: int = Field(ge=1)
+    lease_expires_at: datetime
+
+    @model_validator(mode="after")
+    def require_aware_expiry(self) -> OperationLease:
+        if self.lease_expires_at.tzinfo is None:
+            raise ValueError("operation lease expiry must be timezone-aware")
+        return self
 
 
 class OperationReceipt(MagiModel):

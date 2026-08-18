@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import re
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, AsyncIterator
 from uuid import UUID, uuid5
 
@@ -33,6 +34,8 @@ from magi.application import (
     OperationEventType,
     OperationIdempotencyConflict,
     OperationKind,
+    OperationLease,
+    OperationLeaseLost,
     OperationReceipt,
     OperationStage,
     OperationStatus,
@@ -349,6 +352,9 @@ class PostgresOperationStore(OperationStore):
 
     def __init__(self, pool: AsyncConnectionPool[Any]) -> None:
         self._pool = pool
+        self._lease_connection: ContextVar[Any | None] = ContextVar(
+            f"magi_operation_lease_{id(self)}", default=None
+        )
 
     async def setup(self) -> None:
         async with self._pool.connection() as connection:
@@ -532,6 +538,205 @@ class PostgresOperationStore(OperationStore):
         except ValidationError as exc:
             raise ProtocolViolation("persisted operation event is invalid") from exc
 
+    @asynccontextmanager
+    async def claim(
+        self, *, worker_id: str, claimed_at: datetime, lease_seconds: int
+    ) -> AsyncIterator[OperationLease | None]:
+        owner_digest = _worker_digest(worker_id)
+        _validate_lease_time(claimed_at, lease_seconds)
+        lock_id: int | None = None
+        token: object | None = None
+        async with self._pool.connection() as connection:
+            try:
+                async with connection.transaction():
+                    cursor = await connection.execute(
+                        """
+                        SELECT * FROM magi_operations
+                        WHERE status = 'accepted'
+                           OR (status = 'running' AND lease_expires_at <= %s)
+                        ORDER BY created_at ASC
+                        FOR UPDATE SKIP LOCKED LIMIT 1
+                        """,
+                        (claimed_at,),
+                    )
+                    row = await cursor.fetchone()
+                    lease = None
+                    if row is not None:
+                        lock_id = _advisory_lock_id(row["storage_key"])
+                        lock_cursor = await connection.execute(
+                            "SELECT pg_try_advisory_lock(%s) AS acquired", (lock_id,)
+                        )
+                        lock_row = await lock_cursor.fetchone()
+                        if lock_row is None or not lock_row["acquired"]:
+                            lock_id = None
+                        else:
+                            fencing_token = int(row["fencing_token"]) + 1
+                            stage = (
+                                OperationStage.COORDINATOR
+                                if row["kind"] == OperationKind.CREATE_DECISION.value
+                                else OperationStage.FIRST_BALLOT
+                            )
+                            sequence = int(row["last_event_sequence"]) + 1
+                            expires_at = claimed_at + timedelta(seconds=lease_seconds)
+                            await connection.execute(
+                                """
+                                UPDATE magi_operations
+                                SET status = 'running', stage = %s,
+                                    fencing_token = %s, lease_owner_digest = %s,
+                                    lease_expires_at = %s,
+                                    last_event_sequence = %s, updated_at = %s
+                                WHERE operation_id = %s
+                                """,
+                                (stage.value, fencing_token, owner_digest, expires_at,
+                                 sequence, claimed_at, row["operation_id"]),
+                            )
+                            await connection.execute(
+                                """
+                                INSERT INTO magi_operation_events (
+                                    operation_id, sequence, event_type, status,
+                                    stage, message_code, occurred_at
+                                ) VALUES (%s, %s, 'started', 'running', %s, %s, %s)
+                                """,
+                                (row["operation_id"], sequence, stage.value,
+                                 "operation_started" if row["status"] == "accepted"
+                                 else "operation_resumed", claimed_at),
+                            )
+                            lease = OperationLease(
+                                operation_id=row["operation_id"], kind=row["kind"],
+                                decision_id=row["decision_id"],
+                                decision_version=row["decision_version"],
+                                classification=row["classification"],
+                                request_payload=dict(row["request_payload"]),
+                                fencing_token=fencing_token,
+                                lease_expires_at=expires_at,
+                            )
+                if lease is not None:
+                    token = self._lease_connection.set(connection)
+                yield lease
+            finally:
+                if token is not None:
+                    self._lease_connection.reset(token)
+                if lock_id is not None:
+                    await connection.execute("SELECT pg_advisory_unlock(%s)", (lock_id,))
+
+    async def renew(
+        self, lease: OperationLease, *, worker_id: str,
+        renewed_at: datetime, lease_seconds: int
+    ) -> OperationLease:
+        _validate_lease_time(renewed_at, lease_seconds)
+        expires_at = renewed_at + timedelta(seconds=lease_seconds)
+        async with self._connection() as connection:
+            cursor = await connection.execute(
+                """
+                UPDATE magi_operations SET lease_expires_at = %s, updated_at = %s
+                WHERE operation_id = %s AND status = 'running'
+                  AND fencing_token = %s AND lease_owner_digest = %s
+                RETURNING operation_id
+                """,
+                (expires_at, renewed_at, lease.operation_id, lease.fencing_token,
+                 _worker_digest(worker_id)),
+            )
+            if await cursor.fetchone() is None:
+                raise OperationLeaseLost("operation lease is no longer current")
+        return lease.model_copy(update={"lease_expires_at": expires_at})
+
+    async def advance(
+        self, lease: OperationLease, *, worker_id: str, stage: OperationStage,
+        message_code: str, occurred_at: datetime
+    ) -> OperationReceipt:
+        return await self._transition(
+            lease, worker_id=worker_id, status=OperationStatus.RUNNING,
+            stage=stage, event_type=OperationEventType.STAGE_CHANGED,
+            message_code=message_code, occurred_at=occurred_at,
+        )
+
+    async def succeed(
+        self, lease: OperationLease, *, worker_id: str, result: DecisionView,
+        completed_at: datetime
+    ) -> OperationReceipt:
+        validated = DecisionView.model_validate(result)
+        if (validated.decision_id != lease.decision_id
+                or validated.decision_version != lease.decision_version):
+            raise ValueError("operation result decision identity does not match")
+        return await self._transition(
+            lease, worker_id=worker_id, status=OperationStatus.SUCCEEDED,
+            stage=OperationStage.COMPLETE, event_type=OperationEventType.SUCCEEDED,
+            message_code="operation_succeeded", occurred_at=completed_at,
+            result=validated,
+        )
+
+    async def fail(
+        self, lease: OperationLease, *, worker_id: str, failure_code: str,
+        completed_at: datetime
+    ) -> OperationReceipt:
+        if re.fullmatch(r"[a-z][a-z0-9_]{0,99}", failure_code) is None:
+            raise ValueError("operation failure code is invalid")
+        return await self._transition(
+            lease, worker_id=worker_id, status=OperationStatus.FAILED,
+            stage=OperationStage.COMPLETE, event_type=OperationEventType.FAILED,
+            message_code="operation_failed", occurred_at=completed_at,
+            failure_code=failure_code,
+        )
+
+    async def _transition(
+        self, lease: OperationLease, *, worker_id: str, status: OperationStatus,
+        stage: OperationStage, event_type: OperationEventType, message_code: str,
+        occurred_at: datetime, result: DecisionView | None = None,
+        failure_code: str | None = None,
+    ) -> OperationReceipt:
+        if occurred_at.tzinfo is None:
+            raise ValueError("operation transition time must be timezone-aware")
+        OperationEvent(
+            operation_id=lease.operation_id, sequence=1, event_type=event_type,
+            status=status, stage=stage, occurred_at=occurred_at,
+            message_code=message_code,
+        )
+        completed_at = occurred_at if status is not OperationStatus.RUNNING else None
+        async with self._connection() as connection:
+            async with connection.transaction():
+                cursor = await connection.execute(
+                    """
+                    UPDATE magi_operations
+                    SET status = %s, stage = %s, result = %s, failure_code = %s,
+                        completed_at = %s, updated_at = %s,
+                        lease_owner_digest = CASE WHEN %s = 'running'
+                            THEN lease_owner_digest ELSE NULL END,
+                        lease_expires_at = CASE WHEN %s = 'running'
+                            THEN lease_expires_at ELSE NULL END,
+                        last_event_sequence = last_event_sequence + 1
+                    WHERE operation_id = %s AND status = 'running'
+                      AND fencing_token = %s AND lease_owner_digest = %s
+                    RETURNING *
+                    """,
+                    (status.value, stage.value,
+                     None if result is None else Jsonb(result.model_dump(mode="json")),
+                     failure_code, completed_at, occurred_at, status.value, status.value,
+                     lease.operation_id, lease.fencing_token, _worker_digest(worker_id)),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    raise OperationLeaseLost("operation lease is no longer current")
+                await connection.execute(
+                    """
+                    INSERT INTO magi_operation_events (
+                        operation_id, sequence, event_type, status,
+                        stage, message_code, occurred_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (lease.operation_id, row["last_event_sequence"], event_type.value,
+                     status.value, stage.value, message_code, occurred_at),
+                )
+        return _operation_receipt(row)
+
+    @asynccontextmanager
+    async def _connection(self) -> AsyncIterator[Any]:
+        leased = self._lease_connection.get()
+        if leased is not None:
+            yield leased
+            return
+        async with self._pool.connection() as connection:
+            yield connection
+
 
 class PostgresPersistenceRuntime:
     """Own one pool shared by the MAGI ledger and LangGraph checkpointer."""
@@ -655,6 +860,19 @@ def _principal_digest(principal: str) -> str:
     if not principal:
         raise ValueError("operation principal is required")
     return hashlib.sha256(principal.encode("utf-8")).hexdigest()
+
+
+def _worker_digest(worker_id: str) -> str:
+    if not worker_id.strip():
+        raise ValueError("operation worker id is required")
+    return hashlib.sha256(worker_id.encode("utf-8")).hexdigest()
+
+
+def _validate_lease_time(timestamp: datetime, lease_seconds: int) -> None:
+    if timestamp.tzinfo is None:
+        raise ValueError("operation lease time must be timezone-aware")
+    if lease_seconds < 3 or lease_seconds > 3600:
+        raise ValueError("operation lease must be between 3 and 3600 seconds")
 
 
 def _validate_digest(value: str, label: str) -> None:

@@ -93,7 +93,7 @@ and every second-round ballot requires an audit reason whether retained or revis
 
 ## UI/UX delivery track
 
-Status: UI-D1 through UI-D4b-2a accepted; UI-D4b-2b PostgreSQL store implemented.
+Status: UI-D1 through UI-D4b-2a accepted; UI-D4b-2c worker implemented.
 
 - UI-D1: define user journeys, information architecture, and every workflow state.
 - UI-D2: confirm low-fidelity Web and terminal wireframes before visual styling.

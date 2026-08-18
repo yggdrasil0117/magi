@@ -21,6 +21,8 @@ from magi.application import (
     OperationEventType,
     OperationIdempotencyConflict,
     OperationKind,
+    OperationLease,
+    OperationLeaseLost,
     OperationStage,
     OperationStatus,
 )
@@ -410,6 +412,43 @@ class PostgresCommandIdempotencyTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PostgresOperationStoreTests(unittest.IsolatedAsyncioTestCase):
+    async def test_claim_returns_none_without_taking_advisory_lock(self) -> None:
+        connection = FakeConnection({})
+        store = PostgresOperationStore(FakePool(connection))  # type: ignore[arg-type]
+
+        async with store.claim(
+            worker_id="worker-1", claimed_at=OPERATION_TIME, lease_seconds=30
+        ) as claimed:
+            self.assertIsNone(claimed)
+
+        self.assertFalse(
+            any("pg_try_advisory_lock" in query for query, _ in connection.calls)
+        )
+
+    async def test_stale_fencing_token_cannot_renew_lease(self) -> None:
+        case = make_case()
+        store = PostgresOperationStore(
+            FakePool(FakeConnection({}))  # type: ignore[arg-type]
+        )
+        claimed = OperationLease(
+            operation_id=OPERATION_ID,
+            kind=OperationKind.RUN_DECISION,
+            decision_id=case.decision_id,
+            decision_version=case.version,
+            classification=DataClassification.INTERNAL,
+            request_payload={},
+            fencing_token=4,
+            lease_expires_at=OPERATION_TIME,
+        )
+
+        with self.assertRaises(OperationLeaseLost):
+            await store.renew(
+                claimed,
+                worker_id="stale-worker",
+                renewed_at=OPERATION_TIME,
+                lease_seconds=30,
+            )
+
     async def test_accept_inserts_receipt_and_first_event_atomically(self) -> None:
         connection = FakeConnection({})
         store = PostgresOperationStore(FakePool(connection))  # type: ignore[arg-type]

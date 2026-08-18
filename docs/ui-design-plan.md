@@ -1,6 +1,6 @@
 # MAGI UI/UX delivery plan
 
-Status: UI-D1 through UI-D4b-2a accepted; UI-D4b-2b PostgreSQL store implemented
+Status: UI-D1 through UI-D4b-2a accepted; UI-D4b-2c worker implemented
 
 ## Product objective
 
