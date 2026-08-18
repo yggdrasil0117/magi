@@ -1,6 +1,6 @@
 # UI-D4b-2a: durable asynchronous operations
 
-Status: accepted; contract, storage, and D4b-2c worker implemented
+Status: accepted; contract through D4b-2e Web integration implemented
 
 ## Decision
 
@@ -149,8 +149,8 @@ parallel model calls requires its own protocol and user-facing semantics.
 
 1. D4b-2b: durable operation store, event append/read port, and real PostgreSQL tests. Implemented.
 2. D4b-2c: worker claim/lease/advisory-lock loop and application adapters. Implemented.
-3. D4b-2d: async API responses, polling/event endpoints, authorization and OpenAPI.
-4. D4b-2e: Web create/run submission, reconnect and event-driven progress UI.
+3. D4b-2d: async API responses, polling/event endpoints, authorization and OpenAPI. Implemented.
+4. D4b-2e: Web create/run submission, reconnect and event-driven progress UI. Implemented.
 
 ## Confirmation requested
 

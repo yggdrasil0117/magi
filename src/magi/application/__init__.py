@@ -2,10 +2,14 @@
 
 from .models import DecisionView, DecisionViewProjector
 from .operations import (
+    DecisionCatalog,
+    DecisionCatalogEntry,
+    DecisionHistory,
     OperationEvent,
     OperationEventPage,
     OperationEventType,
     OperationIdempotencyConflict,
+    OperationInbox,
     OperationLease,
     OperationLeaseLost,
     OperationKind,
@@ -46,6 +50,9 @@ from .preparation import (
 )
 
 __all__ = [
+    "DecisionCatalog",
+    "DecisionCatalogEntry",
+    "DecisionHistory",
     "DecisionApplicationService",
     "CommandIdempotencyConflict",
     "CommandIdempotencyStore",
@@ -62,6 +69,7 @@ __all__ = [
     "OperationEventPage",
     "OperationEventType",
     "OperationIdempotencyConflict",
+    "OperationInbox",
     "OperationLease",
     "OperationLeaseLost",
     "OperationKind",

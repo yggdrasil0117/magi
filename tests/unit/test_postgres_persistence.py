@@ -605,7 +605,7 @@ class PostgresOperationStoreTests(unittest.IsolatedAsyncioTestCase):
         await store.setup()
 
         self.assertEqual(connection.transactions, 1)
-        self.assertEqual(len(connection.calls), 4)
+        self.assertEqual(len(connection.calls), 6)
 
 
 if __name__ == "__main__":

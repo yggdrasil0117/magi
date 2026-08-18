@@ -101,4 +101,9 @@ The proposed durable create/run receipt, worker, and event-replay contract is
 documented in docs/ui-d4b2-async-operations.md.
 UI-D4b-2b implements its durable PostgreSQL operation receipts and public event
 pages. UI-D4b-2c adds a recoverable leased worker with advisory locking and
-fencing-token protected writes; async HTTP resources remain the next increment.
+fencing-token protected writes. UI-D4b-2d adds opt-in asynchronous submission,
+owner-scoped status polling, and cursor-based public event replay. UI-D4b-2e wires
+those contracts into the EVA-inspired Web workspace with reconnectable progress.
+UI-D4c adds principal-scoped operation and decision inboxes with actionable counts,
+version history, and comparison. UI-D4d through UI-D5 complete
+terminal parity, automation CLI, and accessibility/cross-client acceptance.

@@ -26,6 +26,9 @@ from magi.agents.invocation import (
     ModelInvocationRecord,
 )
 from magi.application import (
+    DecisionCatalog,
+    DecisionCatalogEntry,
+    DecisionHistory,
     CommandIdempotencyConflict,
     CommandIdempotencyStore,
     DecisionView,
@@ -33,6 +36,7 @@ from magi.application import (
     OperationEventPage,
     OperationEventType,
     OperationIdempotencyConflict,
+    OperationInbox,
     OperationKind,
     OperationLease,
     OperationLeaseLost,
@@ -164,6 +168,20 @@ OPERATION_SCHEMA = (
     """
     CREATE INDEX IF NOT EXISTS magi_operations_decision_idx
     ON magi_operations (decision_id, decision_version, created_at)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS magi_decision_catalog (
+        principal_digest CHAR(64) NOT NULL,
+        decision_id UUID NOT NULL,
+        decision_version INTEGER NOT NULL CHECK (decision_version >= 1),
+        view JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (principal_digest, decision_id, decision_version)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS magi_decision_catalog_recent_idx
+    ON magi_decision_catalog (principal_digest, updated_at DESC)
     """,
 )
 
@@ -538,6 +556,108 @@ class PostgresOperationStore(OperationStore):
         except ValidationError as exc:
             raise ProtocolViolation("persisted operation event is invalid") from exc
 
+    async def inbox(
+        self,
+        *,
+        principal: str,
+        limit: int = 50,
+    ) -> OperationInbox:
+        if limit < 1 or limit > 100:
+            raise ValueError("operation inbox limit must be between 1 and 100")
+        principal_digest = _principal_digest(principal)
+        async with self._pool.connection() as connection:
+            count_cursor = await connection.execute(
+                """
+                SELECT
+                    COUNT(*) FILTER (WHERE status IN ('accepted', 'running')) AS active_count,
+                    COUNT(*) FILTER (WHERE status = 'failed') AS failed_count
+                FROM magi_operations WHERE principal_digest = %s
+                """,
+                (principal_digest,),
+            )
+            counts = await count_cursor.fetchone()
+            cursor = await connection.execute(
+                """
+                SELECT * FROM magi_operations
+                WHERE principal_digest = %s
+                ORDER BY updated_at DESC, operation_id DESC
+                LIMIT %s
+                """,
+                (principal_digest, limit),
+            )
+            rows = await cursor.fetchall()
+        if counts is None:
+            raise ProtocolViolation("persisted operation counts are invalid")
+        return OperationInbox(
+            operations=tuple(_operation_receipt(row) for row in rows),
+            active_count=counts["active_count"],
+            failed_count=counts["failed_count"],
+        )
+
+    async def decisions(self, *, principal: str, limit: int = 50) -> DecisionCatalog:
+        if limit < 1 or limit > 100:
+            raise ValueError("decision catalog limit must be between 1 and 100")
+        async with self._pool.connection() as connection:
+            cursor = await connection.execute(
+                """
+                SELECT view, updated_at FROM (
+                    SELECT DISTINCT ON (decision_id) decision_id, view, updated_at
+                    FROM magi_decision_catalog WHERE principal_digest = %s
+                    ORDER BY decision_id, decision_version DESC
+                ) latest
+                ORDER BY updated_at DESC, decision_id DESC LIMIT %s
+                """,
+                (_principal_digest(principal), limit),
+            )
+            rows = await cursor.fetchall()
+        entries = tuple(_catalog_entry(row) for row in rows)
+        entries = tuple(sorted(entries, key=lambda item: item.updated_at, reverse=True))
+        return DecisionCatalog(
+            decisions=entries,
+            required_action_count=sum(bool(item.available_actions) for item in entries),
+        )
+
+    async def versions(
+        self, *, principal: str, decision_id: UUID
+    ) -> DecisionHistory | None:
+        async with self._pool.connection() as connection:
+            cursor = await connection.execute(
+                """
+                SELECT view FROM magi_decision_catalog
+                WHERE principal_digest = %s AND decision_id = %s
+                ORDER BY decision_version DESC
+                """,
+                (_principal_digest(principal), decision_id),
+            )
+            rows = await cursor.fetchall()
+        if not rows:
+            return None
+        try:
+            return DecisionHistory(
+                decision_id=decision_id,
+                versions=tuple(DecisionView.model_validate(row["view"]) for row in rows),
+            )
+        except ValidationError as exc:
+            raise ProtocolViolation("persisted decision catalog is invalid") from exc
+
+    async def record_decision(
+        self, *, principal: str, view: DecisionView, updated_at: datetime
+    ) -> None:
+        if updated_at.tzinfo is None:
+            raise ValueError("decision catalog update must be timezone-aware")
+        async with self._pool.connection() as connection:
+            await connection.execute(
+                """
+                INSERT INTO magi_decision_catalog (
+                    principal_digest, decision_id, decision_version, view, updated_at
+                ) VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (principal_digest, decision_id, decision_version)
+                DO UPDATE SET view = EXCLUDED.view, updated_at = EXCLUDED.updated_at
+                """,
+                (_principal_digest(principal), view.decision_id, view.version,
+                 Jsonb(view.model_dump(mode="json")), updated_at),
+            )
+
     @asynccontextmanager
     async def claim(
         self, *, worker_id: str, claimed_at: datetime, lease_seconds: int
@@ -726,6 +846,19 @@ class PostgresOperationStore(OperationStore):
                     (lease.operation_id, row["last_event_sequence"], event_type.value,
                      status.value, stage.value, message_code, occurred_at),
                 )
+                if status is OperationStatus.SUCCEEDED and result is not None:
+                    await connection.execute(
+                        """
+                        INSERT INTO magi_decision_catalog (
+                            principal_digest, decision_id, decision_version,
+                            view, updated_at
+                        ) SELECT principal_digest, decision_id, decision_version, %s, %s
+                          FROM magi_operations WHERE operation_id = %s
+                        ON CONFLICT (principal_digest, decision_id, decision_version)
+                        DO UPDATE SET view = EXCLUDED.view, updated_at = EXCLUDED.updated_at
+                        """,
+                        (Jsonb(result.model_dump(mode="json")), occurred_at, lease.operation_id),
+                    )
         return _operation_receipt(row)
 
     @asynccontextmanager
@@ -913,6 +1046,23 @@ def _operation_receipt(row: Mapping[str, Any]) -> OperationReceipt:
         )
     except (KeyError, ValidationError) as exc:
         raise ProtocolViolation("persisted operation receipt is invalid") from exc
+
+
+def _catalog_entry(row: Mapping[str, Any]) -> DecisionCatalogEntry:
+    try:
+        view = DecisionView.model_validate(row["view"])
+        return DecisionCatalogEntry(
+            decision_id=view.decision_id,
+            version=view.version,
+            title=view.case.title,
+            state=view.state.value,
+            risk_level=view.case.risk_level.value,
+            data_classification=view.case.data_classification,
+            available_actions=view.available_actions,
+            updated_at=row["updated_at"],
+        )
+    except (KeyError, ValidationError) as exc:
+        raise ProtocolViolation("persisted decision catalog is invalid") from exc
 
 
 def _record_parameters(record: ModelInvocationRecord) -> tuple[object, ...]:

@@ -1,6 +1,6 @@
 # UI-D4 production implementation plan
 
-Status: UI-D4a through UI-D4b-2a accepted; UI-D4b-2c implemented
+Status: UI-D4 complete; UI-D5 acceptance complete
 
 ## Scope rule
 
@@ -99,12 +99,38 @@ UI-D4b-1 is implemented with these boundaries:
   request bodies at 10 KB, and continues to reject create and run;
 - successful commands render the returned `DecisionView` immediately.
 
-UI-D4b-2 remains blocked on a product/API choice for long-running create and run:
-keep a synchronous HTTP request open, or add an accepted command receipt plus
-public event/status replay. The latter remains recommended for reconnect safety.
+UI-D4b-2 selected an accepted command receipt plus public event/status replay for
+reconnect safety while preserving synchronous compatibility.
 
 The accepted durable receipt and replay option is specified in
 `docs/ui-d4b2-async-operations.md`. Application-level receipt/event models and
 fail-closed lifecycle tests are present. PostgreSQL operation/event persistence is
 implemented in D4b-2b. D4b-2c implements recoverable leased execution with
-fencing-token protected writes; the async HTTP endpoints remain inactive.
+fencing-token protected writes. D4b-2d activates opt-in async submission,
+owner-scoped polling, public event replay, OpenAPI contracts, and the production
+worker lifecycle.
+
+UI-D4b-2e connects those resources to the production Web workspace: explicit
+asynchronous create, guarded asynchronous run, stage/event monitoring, and refresh
+recovery by opaque operation ID. Bearer credentials remain memory-only.
+
+UI-D4c-1 adds the first discovery surface: a principal-scoped operation inbox with
+active/failed counts and recent receipts. UI-D4c-2 separately adds the decision/version
+catalog so the UI does not infer decision history from operation history.
+
+UI-D4c-2 adds a principal-scoped decision catalog, required-action count, and ordered
+version history backed by a dedicated PostgreSQL projection. Synchronous API commands
+and asynchronous worker completion both update the same projection. The Web history
+surface compares authoritative `DecisionView` versions side by side.
+
+UI-D4d provides a keyboard-first terminal workflow over the same authenticated HTTP
+resources. It supports inbox, get, history, create, confirm, run, cancel, and watch,
+sanitizes failures, and never imports orchestration or agent implementations.
+
+UI-D4e provides the `magi` automation CLI with stable JSON output, public command
+schemas, explicit asynchronous create/run, and documented exit-code families.
+
+UI-D5 acceptance covers versioned state fixtures, hidden-ballot disclosure, keyboard
+landmarks, labelled credentials, visible focus, reduced motion, responsive breakpoints,
+same-origin assets, no-color terminal behavior, JSON stability, proxy allowlists, and
+cross-client use of the same API projections.

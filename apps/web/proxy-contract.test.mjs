@@ -30,11 +30,16 @@ test("proxy strips the local API prefix and retains only query parameters", () =
   );
 });
 
-test("proxy permits only confirm and cancel mutations", () => {
+test("proxy permits accepted commands and operation replay only", () => {
   assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/confirm`), true);
   assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/cancel`), true);
-  assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/run`), false);
-  assert.equal(isAllowedApiOperation("POST", "/api/v1/decisions"), false);
+  assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/run`), true);
+  assert.equal(isAllowedApiOperation("POST", "/api/v1/decisions"), true);
+  assert.equal(isAllowedApiOperation("GET", `/api/v1/operations/${id}`), true);
+  assert.equal(isAllowedApiOperation("GET", `/api/v1/operations/${id}/events`), true);
+  assert.equal(isAllowedApiOperation("GET", "/api/v1/operations"), true);
+  assert.equal(isAllowedApiOperation("GET", "/api/v1/decisions"), true);
+  assert.equal(isAllowedApiOperation("GET", `/api/v1/decisions/${id}/versions`), true);
   assert.equal(isAllowedApiOperation("GET", `/api/v1/decisions/${id}/confirm`), false);
   assert.equal(
     upstreamPath(new URL(`/api/v1/decisions/${id}/confirm`, "http://localhost"), "POST"),
@@ -43,5 +48,17 @@ test("proxy permits only confirm and cancel mutations", () => {
   assert.throws(
     () => upstreamPath(new URL(`/api/v1/decisions/${id}/cancel?version=1`, "http://localhost"), "POST"),
     /query|Mutation/,
+  );
+  assert.equal(
+    upstreamPath(new URL(`/api/v1/operations/${id}/events?after=2&limit=100`, "http://localhost")),
+    `/v1/operations/${id}/events?after=2&limit=100`,
+  );
+  assert.throws(
+    () => upstreamPath(new URL(`/api/v1/operations/${id}/events?limit=101`, "http://localhost")),
+    /limit/,
+  );
+  assert.equal(
+    upstreamPath(new URL("/api/v1/operations?limit=50", "http://localhost")),
+    "/v1/operations?limit=50",
   );
 });

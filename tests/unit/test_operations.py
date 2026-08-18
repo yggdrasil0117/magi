@@ -13,6 +13,7 @@ from magi.application import (
     OperationEventPage,
     OperationEventType,
     OperationKind,
+    OperationInbox,
     OperationReceipt,
     OperationStage,
     OperationStatus,
@@ -142,6 +143,22 @@ class OperationContractTests(unittest.TestCase):
         validate_operation_transition(OperationStatus.RUNNING, OperationStatus.SUCCEEDED)
         with self.assertRaisesRegex(ValueError, "illegal operation transition"):
             validate_operation_transition(OperationStatus.SUCCEEDED, OperationStatus.RUNNING)
+
+    def test_inbox_is_newest_first_and_has_nonnegative_counts(self) -> None:
+        newest = receipt(updated_at=NOW + timedelta(seconds=2))
+        older = receipt(
+            operation_id=UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+            updated_at=NOW + timedelta(seconds=1),
+        )
+        inbox = OperationInbox(
+            operations=(newest, older), active_count=2, failed_count=0
+        )
+        self.assertEqual(len(inbox.operations), 2)
+
+        with self.assertRaisesRegex(ValidationError, "newest first"):
+            OperationInbox(
+                operations=(older, newest), active_count=2, failed_count=0
+            )
 
 
 if __name__ == "__main__":

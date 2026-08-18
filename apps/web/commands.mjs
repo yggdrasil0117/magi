@@ -9,6 +9,10 @@ const MUTATIONS = Object.freeze({
     title: "取消当前决策版本",
     consequence: "取消会停止当前未完成工作流，但不会删除案例、证据或已有审计记录。",
   },
+  run: {
+    title: "启动三方评估",
+    consequence: "任务将在后台执行三人格独立评估、交叉复核与确定性仲裁；页面可断开后恢复。",
+  },
 });
 
 export function commandPresentation(action) {

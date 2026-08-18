@@ -1,6 +1,6 @@
 # MAGI UI/UX delivery plan
 
-Status: UI-D1 through UI-D4b-2a accepted; UI-D4b-2c worker implemented
+Status: UI-D1 through UI-D5 complete
 
 ## Product objective
 
@@ -134,7 +134,8 @@ Test representative users and keyboard-only flows; run accessibility checks; ver
 small, medium, and wide layouts; validate every state; and prove cross-client
 semantic parity from versioned fixtures.
 
-## Immediate next design decision
+## Completion
 
-Confirm the UI-D3 token palette, component anatomy, density modes, and representative
-screen treatment before UI-D4 production implementation begins.
+The production Web, terminal, and CLI surfaces now consume the same authenticated,
+versioned API projections. UI-D5 acceptance is recorded in
+`docs/ui-d5-acceptance.md`.

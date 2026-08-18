@@ -100,6 +100,14 @@ class OperationWorker:
                 await asyncio.gather(heartbeat, return_exceptions=True)
             return True
 
+    async def run_forever(self, *, idle_seconds: float = 0.5) -> None:
+        if idle_seconds <= 0:
+            raise ValueError("operation worker idle interval must be positive")
+        while True:
+            worked = await self.run_once()
+            if not worked:
+                await asyncio.sleep(idle_seconds)
+
     async def _heartbeat(self, lease: OperationLease) -> None:
         while True:
             await asyncio.sleep(self._lease_seconds / 3)

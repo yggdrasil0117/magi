@@ -14,6 +14,7 @@ const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
   ["/workspace.mjs", ["workspace.mjs", "text/javascript; charset=utf-8"]],
   ["/commands.mjs", ["commands.mjs", "text/javascript; charset=utf-8"]],
+  ["/operations.mjs", ["operations.mjs", "text/javascript; charset=utf-8"]],
   ["/report.mjs", ["report.mjs", "text/javascript; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
   ["/assets/magi-mark.svg", ["prototypes/assets/magi-fallback-mark.svg", "image/svg+xml"]],
@@ -73,6 +74,7 @@ async function proxyDecisionResource(request, response, requestUrl) {
     if (request.headers["idempotency-key"]) {
       headers["idempotency-key"] = request.headers["idempotency-key"];
     }
+    if (request.headers.prefer) headers.prefer = request.headers.prefer;
     init.body = await boundedRequestBody(request);
   }
   const upstreamResponse = await fetch(target, init);
@@ -80,6 +82,12 @@ async function proxyDecisionResource(request, response, requestUrl) {
   response.writeHead(upstreamResponse.status, {
     ...securityHeaders,
     "content-type": upstreamResponse.headers.get("content-type") || "application/json",
+    ...(upstreamResponse.headers.get("location")
+      ? { location: `/api${upstreamResponse.headers.get("location")}` }
+      : {}),
+    ...(upstreamResponse.headers.get("preference-applied")
+      ? { "preference-applied": upstreamResponse.headers.get("preference-applied") }
+      : {}),
   });
   response.end(body);
 }

@@ -26,7 +26,7 @@ test("cancel intent sanitizes and freezes its optional reason", () => {
 });
 
 test("client refuses unavailable and unsupported mutations", () => {
-  assert.throws(() => createCommandIntent("run", view, { uuid: "run-0001" }), /Unsupported/);
+  assert.throws(() => createCommandIntent("run", view, { uuid: "run-0001" }), /not available/);
   assert.throws(() => createCommandIntent("confirm", { ...view, actions: [] }, { uuid: "confirm-1" }), /not available/);
   assert.throws(() => commandPresentation("create"), /Unsupported/);
 });

@@ -1,5 +1,14 @@
 import { renderReport, safeText } from "./report.mjs";
 import { commandPresentation, createCommandIntent, executeCommand } from "./commands.mjs";
+import {
+  createAsyncIntent,
+  fetchOperation,
+  fetchOperationEvents,
+  fetchOperationInbox,
+  fetchDecisionCatalog,
+  fetchDecisionHistory,
+  submitAsyncOperation,
+} from "./operations.mjs";
 
 const REQUIRED_FIELDS = [
   "schema_version", "decision_id", "version", "state", "case", "evidence",
@@ -13,6 +22,8 @@ let currentView = null;
 let currentToken = "";
 let dialogAction = null;
 let pendingIntent = null;
+let operationController = null;
+let pendingCreateIntent = null;
 
 export const STATE_PRESENTATION = Object.freeze({
   created: ["CREATED", "草案已创建", "决策仍在准备阶段。", "waiting"],
@@ -179,15 +190,12 @@ function renderActions(view) {
   const code = element("div", "gate-code");
   code.append(element("span", "", "AVAILABLE ACTIONS"), element("b", "", view.actions.length ? view.actions.join(" / ").toUpperCase() : "NONE"));
   const copy = element("div", "gate-copy");
-  copy.append(element("strong", "", view.actions.length ? "只执行服务端明确允许的命令" : "当前没有可执行命令"), element("p", "", view.actions.length ? "确认与取消需要再次核对后果；运行将在 UI-D4b-2 接入。" : "客户端不会根据状态自行推断权限。"));
+  copy.append(element("strong", "", view.actions.length ? "只执行服务端明确允许的命令" : "当前没有可执行命令"), element("p", "", view.actions.length ? "确认、运行与取消均先核对后果；运行任务支持断线恢复。" : "客户端不会根据状态自行推断权限。"));
   const controls = element("div", "gate-actions");
   if (view.actions.includes("confirm")) controls.append(commandButton("confirm", "确认并冻结", "primary"));
   if (view.actions.includes("cancel")) controls.append(commandButton("cancel", "取消决策", "danger"));
   if (view.actions.includes("run")) {
-    const deferred = element("button", "command-button deferred", "运行将在 D4b-2 接入");
-    deferred.type = "button";
-    deferred.disabled = true;
-    controls.append(deferred);
+    controls.append(commandButton("run", "启动三方评估", "primary"));
   }
   section.append(code, copy, controls);
   return section;
@@ -291,6 +299,7 @@ function bind() {
     if (button) openCommandDialog(button.dataset.command);
   });
   bindCommandDialog(root, status);
+  bindAsyncForms(root, status);
 }
 
 function openCommandDialog(action) {
@@ -332,9 +341,11 @@ function bindCommandDialog(root, status) {
     event.preventDefault();
     const submit = document.querySelector("#command-submit");
     if (!pendingIntent) {
-      pendingIntent = createCommandIntent(dialogAction, currentView, {
-        reason: document.querySelector("#cancel-reason").value,
-      });
+      pendingIntent = dialogAction === "run"
+        ? createAsyncIntent("run", currentView)
+        : createCommandIntent(dialogAction, currentView, {
+          reason: document.querySelector("#cancel-reason").value,
+        });
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
@@ -342,6 +353,13 @@ function bindCommandDialog(root, status) {
     status.className = "status-message";
     status.textContent = `${dialogAction === "confirm" ? "确认" : "取消"}命令正在提交…`;
     try {
+      if (dialogAction === "run") {
+        const operation = await submitAsyncOperation(pendingIntent, currentToken, controller.signal);
+        pendingIntent = null;
+        dialog.close();
+        await monitorOperation(operation, currentToken, root, status);
+        return;
+      }
       const payload = await executeCommand(pendingIntent, currentToken, controller.signal);
       pendingIntent = null;
       renderWorkspace(root, payload);
@@ -358,6 +376,231 @@ function bindCommandDialog(root, status) {
       clearTimeout(timer);
       submit.disabled = false;
     }
+  });
+}
+
+function bindAsyncForms(root, status) {
+  const createForm = document.querySelector("#create-form");
+  const operationForm = document.querySelector("#operation-form");
+  const inboxForm = document.querySelector("#inbox-form");
+  const saved = sessionStorage.getItem("magi.operation.id");
+  if (saved) operationForm.elements.operation_id.value = safeText(saved);
+
+  createForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = createForm.querySelector("button[type=submit]");
+    button.disabled = true;
+    currentToken = createForm.elements.token.value;
+    try {
+      pendingCreateIntent ||= createAsyncIntent("create", {
+          rawQuestion: createForm.elements.raw_question.value,
+          risk: createForm.elements.risk.value,
+          classification: createForm.elements.classification.value,
+        });
+      const operation = await submitAsyncOperation(pendingCreateIntent, currentToken);
+      pendingCreateIntent = null;
+      await monitorOperation(operation, currentToken, root, status);
+    } catch (error) {
+      status.className = "status-message error";
+      status.textContent = `${safeText(error.message)} 再次提交将复用相同幂等键。`;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  operationForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    currentToken = operationForm.elements.token.value;
+    try {
+      const operation = await fetchOperation(
+        operationForm.elements.operation_id.value.trim(), currentToken,
+      );
+      await monitorOperation(operation, currentToken, root, status);
+    } catch (error) {
+      status.className = "status-message error";
+      status.textContent = safeText(error.message);
+    }
+  });
+
+  inboxForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    currentToken = inboxForm.elements.token.value;
+    try {
+      const [inbox, catalog] = await Promise.all([
+        fetchOperationInbox(currentToken), fetchDecisionCatalog(currentToken),
+      ]);
+      renderOperationInbox(inbox);
+      renderDecisionCatalog(catalog);
+      status.className = "status-message";
+      status.textContent = `任务收件箱已同步：${inbox.activeCount} 个进行中，${inbox.failedCount} 个失败。`;
+    } catch (error) {
+      status.className = "status-message error";
+      status.textContent = safeText(error.message);
+    }
+  });
+
+  document.querySelector("#operation-inbox").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-operation-id]");
+    if (!button) return;
+    try {
+      const operation = await fetchOperation(button.dataset.operationId, currentToken);
+      await monitorOperation(operation, currentToken, root, status);
+    } catch (error) {
+      status.className = "status-message error";
+      status.textContent = safeText(error.message);
+    }
+  });
+  document.querySelector("#decision-catalog").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-decision-id]");
+    if (!button) return;
+    try {
+      const history = await fetchDecisionHistory(button.dataset.decisionId, currentToken);
+      renderDecisionHistory(history);
+    } catch (error) {
+      status.className = "status-message error";
+      status.textContent = safeText(error.message);
+    }
+  });
+}
+
+function renderOperationInbox(inbox) {
+  const root = document.querySelector("#operation-inbox");
+  root.replaceChildren();
+  const heading = element("header", "inbox-heading");
+  heading.append(
+    element("span", "", "AUTHORIZED OPERATION INBOX"),
+    element("strong", "", `${inbox.activeCount} ACTIVE / ${inbox.failedCount} FAILED`),
+  );
+  root.append(heading);
+  if (!inbox.operations.length) {
+    root.append(element("p", "empty", "当前主体没有后台任务。"));
+  }
+  inbox.operations.forEach((operation) => {
+    const button = element("button", `inbox-operation status-${operation.status}`);
+    button.type = "button";
+    button.dataset.operationId = operation.operationId;
+    button.append(
+      element("code", "", operation.operationId),
+      element("strong", "", `${operation.kind === "create_decision" ? "创建" : "运行"} · ${stageLabel(operation.stage)}`),
+      element("span", "", `${operation.status.toUpperCase()} / V${operation.version}`),
+    );
+    root.append(button);
+  });
+  root.hidden = false;
+}
+
+function renderDecisionCatalog(catalog) {
+  const root = document.querySelector("#decision-catalog");
+  root.replaceChildren();
+  const heading = element("header", "inbox-heading");
+  heading.append(
+    element("span", "", "AUTHORIZED DECISION CATALOG"),
+    element("strong", "", `${catalog.requiredActionCount} REQUIRE ACTION`),
+  );
+  root.append(heading);
+  catalog.decisions.forEach((decision) => {
+    const button = element("button", "inbox-operation");
+    button.type = "button";
+    button.dataset.decisionId = decision.decisionId;
+    button.append(
+      element("code", "", `${decision.decisionId} / V${decision.version}`),
+      element("strong", "", decision.title),
+      element("span", "", `${decision.state.toUpperCase()} · ${decision.actions.join(" / ") || "READ"}`),
+    );
+    root.append(button);
+  });
+  if (!catalog.decisions.length) root.append(element("p", "empty", "暂无已编目决策。"));
+  root.hidden = false;
+}
+
+function renderDecisionHistory(history) {
+  const root = document.querySelector("#version-history");
+  root.replaceChildren(element("code", "", `VERSION HISTORY / ${history.decisionId}`));
+  const grid = element("div", "history-grid");
+  history.versions.forEach((view) => {
+    const card = element("article", "history-version");
+    card.append(
+      element("strong", "", `V${view.version} · ${safeText(view.state).toUpperCase()}`),
+      element("span", "", safeText(view.case?.title)),
+      element("p", "", safeText(view.case?.question)),
+      element("small", "", `${safeText(view.case?.risk_level).toUpperCase()} / ${safeText(view.case?.data_classification).toUpperCase()}`),
+    );
+    grid.append(card);
+  });
+  root.append(grid);
+  root.hidden = false;
+}
+
+async function monitorOperation(initial, token, root, status) {
+  operationController?.abort();
+  operationController = new AbortController();
+  const signal = operationController.signal;
+  let operation = initial;
+  let cursor = 0;
+  const eventLog = [];
+  sessionStorage.setItem("magi.operation.id", operation.operationId);
+  document.querySelector("#operation-form").elements.operation_id.value = operation.operationId;
+  while (!signal.aborted) {
+    const page = await fetchOperationEvents(operation.operationId, cursor, token, signal);
+    cursor = page.next;
+    eventLog.push(...page.events);
+    renderOperationMonitor(operation, eventLog);
+    status.className = "status-message";
+    status.textContent = `后台任务：${stageLabel(operation.stage)} / ${operation.status}`;
+    if (operation.status === "succeeded") {
+      sessionStorage.removeItem("magi.operation.id");
+      const payload = await loadDecision(operation.decisionId, operation.version, token, signal);
+      renderWorkspace(root, payload);
+      status.textContent = "后台任务完成，已载入权威 DecisionView。";
+      return;
+    }
+    if (operation.status === "failed") {
+      sessionStorage.removeItem("magi.operation.id");
+      status.className = "status-message error";
+      status.textContent = `后台任务未完成：${operation.failureCode || "operation_failed"}`;
+      return;
+    }
+    await delay(Math.min(Math.max(operation.pollAfterMs || 1000, 250), 10000), signal);
+    operation = await fetchOperation(operation.operationId, token, signal);
+  }
+}
+
+function renderOperationMonitor(operation, events) {
+  const monitor = document.querySelector("#operation-monitor");
+  monitor.replaceChildren();
+  const heading = element("div", "operation-heading");
+  heading.append(
+    element("code", "", `OPERATION ${operation.operationId}`),
+    element("strong", "", stageLabel(operation.stage)),
+    element("span", "", `${operation.status.toUpperCase()} · V${operation.version}`),
+  );
+  const rail = element("ol", "operation-stages");
+  ["queued", "coordinator", "first_ballot", "cross_review", "arbitration", "reporting", "complete"]
+    .forEach((stage) => {
+      const item = element("li", stage === operation.stage ? "active" : "", stageLabel(stage));
+      rail.append(item);
+    });
+  const log = element("div", "operation-events");
+  events.forEach((event) => log.append(element("span", "", `${event.sequence} · ${stageLabel(event.stage)} · ${event.messageCode}`)));
+  monitor.append(heading, rail, log);
+  monitor.hidden = false;
+}
+
+function stageLabel(stage) {
+  return {
+    queued: "排队", coordinator: "问题规范化", first_ballot: "独立评估",
+    cross_review: "交叉复核", arbitration: "确定性仲裁", reporting: "形成报告",
+    complete: "完成",
+  }[stage] || safeText(stage);
+}
+
+function delay(milliseconds, signal) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, milliseconds);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    }, { once: true });
   });
 }
 

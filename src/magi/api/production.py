@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Callable, Mapping
 from contextlib import asynccontextmanager
@@ -28,6 +29,9 @@ from magi.application import (
     DecisionGraph,
     DecisionPreparationRequest,
     DecisionView,
+    DecisionOperationExecutor,
+    OperationStore,
+    OperationWorker,
 )
 from magi.domain import AgentName
 from magi.infrastructure import PostgresPersistenceRuntime
@@ -113,6 +117,7 @@ class ProductionSettings:
 class ProductionPersistence(Protocol):
     invocation_ledger: InvocationLedger
     command_idempotency_store: CommandIdempotencyStore
+    operation_store: OperationStore
 
     @property
     def checkpointer(self) -> Any: ...
@@ -220,12 +225,14 @@ def create_production_app(
     selected_graph_factory = graph_factory or _build_graph
     selected_coordinator_factory = coordinator_factory or _build_coordinator
     runtime = selected_runtime_factory(selected_settings)
+    operation_store = getattr(runtime, "operation_store", None)
     deferred_service = _DeferredDecisionService()
     readiness_probe = _ProductionReadinessProbe(runtime, deferred_service)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await runtime.open(setup=True)
+        worker_task: asyncio.Task[None] | None = None
         try:
             runner = selected_runner_factory(
                 selected_settings,
@@ -233,13 +240,26 @@ def create_production_app(
             )
             graph = selected_graph_factory(runner, runtime.checkpointer)
             coordinator = selected_coordinator_factory(selected_settings)
-            deferred_service.bind(
-                DecisionApplicationService(graph, normalizer=coordinator)
+            application_service = DecisionApplicationService(
+                graph, normalizer=coordinator
             )
+            deferred_service.bind(application_service)
+            if operation_store is not None:
+                worker = OperationWorker(
+                    operation_store,
+                    DecisionOperationExecutor(application_service),
+                    worker_id=f"api-{os.getpid()}",
+                )
+                worker_task = asyncio.create_task(
+                    worker.run_forever(), name="magi-operation-worker"
+                )
             app.state.magi_runtime = runtime
             app.state.magi_model = selected_settings.openai_model
             yield
         finally:
+            if worker_task is not None:
+                worker_task.cancel()
+                await asyncio.gather(worker_task, return_exceptions=True)
             deferred_service.unbind()
             await runtime.close()
 
@@ -247,6 +267,7 @@ def create_production_app(
         deferred_service,
         selected_authorizer,
         idempotency_store=runtime.command_idempotency_store,
+        operation_store=operation_store,
         lifespan=lifespan,
         readiness_probe=readiness_probe,
     )

@@ -12,6 +12,7 @@ from pydantic import Field, model_validator
 
 from magi.domain.models import MagiModel
 from magi.domain import DataClassification
+from .models import DecisionView
 
 
 class OperationIdempotencyConflict(RuntimeError):
@@ -52,6 +53,23 @@ class OperationStore(Protocol):
         after_sequence: int = 0,
         limit: int = 100,
     ) -> OperationEventPage | None: ...
+
+    async def inbox(
+        self,
+        *,
+        principal: str,
+        limit: int = 50,
+    ) -> OperationInbox: ...
+
+    async def decisions(self, *, principal: str, limit: int = 50) -> DecisionCatalog: ...
+
+    async def versions(
+        self, *, principal: str, decision_id: UUID
+    ) -> DecisionHistory | None: ...
+
+    async def record_decision(
+        self, *, principal: str, view: DecisionView, updated_at: datetime
+    ) -> None: ...
 
 
 class OperationQueue(Protocol):
@@ -261,6 +279,62 @@ class OperationEventPage(MagiModel):
             previous = event.sequence
         if self.next_after_sequence != previous:
             raise ValueError("operation event cursor does not match the page")
+        return self
+
+
+class OperationInbox(MagiModel):
+    """Principal-scoped recent operations and actionable counts."""
+
+    schema_version: Literal["1.0"] = "1.0"
+    operations: tuple[OperationReceipt, ...] = ()
+    active_count: int = Field(ge=0)
+    failed_count: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> OperationInbox:
+        previous: datetime | None = None
+        identities: set[UUID] = set()
+        for operation in self.operations:
+            if operation.operation_id in identities:
+                raise ValueError("operation inbox contains duplicate identities")
+            identities.add(operation.operation_id)
+            if previous is not None and operation.updated_at > previous:
+                raise ValueError("operation inbox must be newest first")
+            previous = operation.updated_at
+        return self
+
+
+class DecisionCatalogEntry(MagiModel):
+    decision_id: UUID
+    version: int = Field(ge=1)
+    title: str = Field(min_length=1, max_length=200)
+    state: str = Field(min_length=1, max_length=80)
+    risk_level: str = Field(min_length=1, max_length=40)
+    data_classification: DataClassification
+    available_actions: tuple[str, ...] = ()
+    updated_at: datetime
+
+
+class DecisionCatalog(MagiModel):
+    schema_version: Literal["1.0"] = "1.0"
+    decisions: tuple[DecisionCatalogEntry, ...] = ()
+    required_action_count: int = Field(ge=0)
+
+
+class DecisionHistory(MagiModel):
+    schema_version: Literal["1.0"] = "1.0"
+    decision_id: UUID
+    versions: tuple[DecisionView, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_versions(self) -> DecisionHistory:
+        previous: int | None = None
+        for view in self.versions:
+            if view.decision_id != self.decision_id:
+                raise ValueError("decision history contains another decision")
+            if previous is not None and view.version >= previous:
+                raise ValueError("decision history must be newest first")
+            previous = view.version
         return self
 
 

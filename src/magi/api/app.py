@@ -20,6 +20,8 @@ from magi.application import (
     CommandIdempotencyStore,
     DecisionPreparationFailed,
     DecisionPreparationRequest,
+    DecisionCatalog,
+    DecisionHistory,
     DecisionReport,
     DecisionReportMarkdownRenderer,
     DecisionReportNotReady,
@@ -27,9 +29,16 @@ from magi.application import (
     DecisionWorkflowConflict,
     DecisionWorkflowNotFound,
     InMemoryCommandIdempotencyStore,
+    OperationEventPage,
+    OperationIdempotencyConflict,
+    OperationInbox,
+    OperationKind,
+    OperationReceipt,
+    OperationStore,
     SuppliedEvidence,
 )
 from magi.domain import ProtocolViolation
+from magi.domain.models import utc_now
 
 from .auth import (
     ApiAuthenticationError,
@@ -88,6 +97,7 @@ def create_app(
     authorizer: DecisionAuthorizer,
     *,
     idempotency_store: CommandIdempotencyStore | None = None,
+    operation_store: OperationStore | None = None,
     lifespan: Callable[[FastAPI], AbstractAsyncContextManager[None]] | None = None,
     readiness_probe: ReadinessProbe | None = None,
 ) -> FastAPI:
@@ -202,6 +212,17 @@ def create_app(
             "The idempotency key was already used for another command.",
         )
 
+    @app.exception_handler(OperationIdempotencyConflict)
+    async def operation_conflict(
+        request: Request,
+        exc: OperationIdempotencyConflict,
+    ) -> JSONResponse:
+        return _error_response(
+            409,
+            "idempotency_conflict",
+            "The idempotency key was already used for another command.",
+        )
+
     @app.exception_handler(ProtocolViolation)
     async def protocol_conflict(
         request: Request,
@@ -254,17 +275,60 @@ def create_app(
             content={"status": "ready" if ready else "not_ready"},
         )
 
+    @app.get(
+        "/v1/decisions",
+        response_model=DecisionCatalog,
+        responses=_error_models(401, 403, 422, 503),
+    )
+    async def get_decision_catalog(
+        response: Response,
+        principal: PrincipalDependency,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    ) -> DecisionCatalog:
+        store = _require_operation_store(operation_store)
+        catalog = await store.decisions(principal=principal.subject, limit=limit)
+        for item in catalog.decisions:
+            await authorizer.authorize(principal, item.decision_id, "decision:read")
+        response.headers.update(_private_operation_headers())
+        return catalog
+
+    @app.get(
+        "/v1/decisions/{decision_id}/versions",
+        response_model=DecisionHistory,
+        responses=_error_models(401, 403, 404, 503),
+    )
+    async def get_decision_versions(
+        decision_id: UUID,
+        response: Response,
+        principal: PrincipalDependency,
+    ) -> DecisionHistory | JSONResponse:
+        await authorizer.authorize(principal, decision_id, "decision:read")
+        store = _require_operation_store(operation_store)
+        history = await store.versions(
+            principal=principal.subject, decision_id=decision_id
+        )
+        if history is None:
+            return _error_response(
+                404, "decision_history_not_found", "Decision history was not found."
+            )
+        response.headers.update(_private_operation_headers())
+        return history
+
     @app.post(
         "/v1/decisions",
-        response_model=DecisionView,
+        response_model=DecisionView | OperationReceipt,
         status_code=201,
-        responses=_error_models(401, 403, 409, 422),
+        responses={
+            202: {"model": OperationReceipt},
+            **_error_models(401, 403, 409, 422, 503),
+        },
     )
     async def create_decision(
         command: CreateDecisionCommand,
         idempotency_key: IdempotencyDependency,
         principal: PrincipalDependency,
-    ) -> DecisionView:
+        prefer: Annotated[str | None, Header()] = None,
+    ) -> DecisionView | JSONResponse:
         await authorizer.authorize(principal, None, "decision:create")
         decision_id = _creation_decision_id(principal.subject, idempotency_key)
         request = DecisionPreparationRequest(
@@ -277,8 +341,23 @@ def create_app(
                 for item in command.evidence
             ),
         )
+        if _respond_async(prefer):
+            store = _require_operation_store(operation_store)
+            receipt = await store.accept(
+                principal=principal.subject,
+                idempotency_key=idempotency_key,
+                fingerprint=_fingerprint("create_async", decision_id, command),
+                kind=OperationKind.CREATE_DECISION,
+                decision_id=decision_id,
+                decision_version=1,
+                classification=command.data_classification,
+                request_payload=request.model_dump(mode="json"),
+                accepted_at=utc_now(),
+            )
+            return _accepted_operation(receipt)
         return await _run_command(
             command_store,
+            operation_store,
             principal,
             idempotency_key,
             "create",
@@ -298,7 +377,12 @@ def create_app(
         version: Annotated[int, Query(ge=1)] = 1,
     ) -> DecisionView:
         await authorizer.authorize(principal, decision_id, "decision:read")
-        return await service.get(decision_id, version)
+        view = await service.get(decision_id, version)
+        if operation_store is not None:
+            await operation_store.record_decision(
+                principal=principal.subject, view=view, updated_at=utc_now()
+            )
+        return view
 
     async def load_report(
         decision_id: UUID,
@@ -359,6 +443,7 @@ def create_app(
         await authorizer.authorize(principal, decision_id, "decision:confirm")
         return await _run_command(
             command_store,
+            operation_store,
             principal,
             idempotency_key,
             "confirm",
@@ -373,18 +458,41 @@ def create_app(
 
     @app.post(
         "/v1/decisions/{decision_id}/run",
-        response_model=DecisionView,
-        responses=_error_models(401, 403, 404, 409, 422),
+        response_model=DecisionView | OperationReceipt,
+        responses={
+            202: {"model": OperationReceipt},
+            **_error_models(401, 403, 404, 409, 422, 503),
+        },
     )
     async def run_decision(
         decision_id: UUID,
         command: RunDecisionCommand,
         idempotency_key: IdempotencyDependency,
         principal: PrincipalDependency,
-    ) -> DecisionView:
+        prefer: Annotated[str | None, Header()] = None,
+    ) -> DecisionView | JSONResponse:
         await authorizer.authorize(principal, decision_id, "decision:run")
+        if _respond_async(prefer):
+            store = _require_operation_store(operation_store)
+            current = await service.get(decision_id, command.version)
+            receipt = await store.accept(
+                principal=principal.subject,
+                idempotency_key=idempotency_key,
+                fingerprint=_fingerprint("run_async", decision_id, command),
+                kind=OperationKind.RUN_DECISION,
+                decision_id=decision_id,
+                decision_version=command.version,
+                classification=current.case.data_classification,
+                request_payload={
+                    "decision_id": str(decision_id),
+                    "version": command.version,
+                },
+                accepted_at=utc_now(),
+            )
+            return _accepted_operation(receipt)
         return await _run_command(
             command_store,
+            operation_store,
             principal,
             idempotency_key,
             "run",
@@ -392,6 +500,81 @@ def create_app(
             command,
             lambda: service.run(decision_id, command.version),
         )
+
+    @app.get(
+        "/v1/operations",
+        response_model=OperationInbox,
+        responses=_error_models(401, 403, 422, 503),
+    )
+    async def get_operation_inbox(
+        response: Response,
+        principal: PrincipalDependency,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    ) -> OperationInbox:
+        store = _require_operation_store(operation_store)
+        inbox = await store.inbox(principal=principal.subject, limit=limit)
+        for receipt in inbox.operations:
+            await _authorize_operation(authorizer, principal, receipt)
+        response.headers.update(_private_operation_headers())
+        return inbox
+
+    @app.get(
+        "/v1/operations/{operation_id}",
+        response_model=OperationReceipt,
+        responses=_error_models(401, 403, 404, 503),
+    )
+    async def get_operation(
+        operation_id: UUID,
+        response: Response,
+        principal: PrincipalDependency,
+    ) -> OperationReceipt | JSONResponse:
+        store = _require_operation_store(operation_store)
+        receipt = await store.get(
+            principal=principal.subject,
+            operation_id=operation_id,
+        )
+        if receipt is None:
+            return _error_response(
+                404, "operation_not_found", "The requested operation was not found."
+            )
+        await _authorize_operation(authorizer, principal, receipt)
+        response.headers.update(_private_operation_headers())
+        return receipt
+
+    @app.get(
+        "/v1/operations/{operation_id}/events",
+        response_model=OperationEventPage,
+        responses=_error_models(401, 403, 404, 422, 503),
+    )
+    async def get_operation_events(
+        operation_id: UUID,
+        response: Response,
+        principal: PrincipalDependency,
+        after: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    ) -> OperationEventPage | JSONResponse:
+        store = _require_operation_store(operation_store)
+        receipt = await store.get(
+            principal=principal.subject,
+            operation_id=operation_id,
+        )
+        if receipt is None:
+            return _error_response(
+                404, "operation_not_found", "The requested operation was not found."
+            )
+        await _authorize_operation(authorizer, principal, receipt)
+        page = await store.events(
+            principal=principal.subject,
+            operation_id=operation_id,
+            after_sequence=after,
+            limit=limit,
+        )
+        if page is None:
+            return _error_response(
+                404, "operation_not_found", "The requested operation was not found."
+            )
+        response.headers.update(_private_operation_headers())
+        return page
 
     @app.post(
         "/v1/decisions/{decision_id}/cancel",
@@ -407,6 +590,7 @@ def create_app(
         await authorizer.authorize(principal, decision_id, "decision:cancel")
         return await _run_command(
             command_store,
+            operation_store,
             principal,
             idempotency_key,
             "cancel",
@@ -424,6 +608,7 @@ def create_app(
 
 async def _run_command(
     store: CommandIdempotencyStore,
+    catalog_store: OperationStore | None,
     principal: ApiPrincipal,
     idempotency_key: str,
     action: str,
@@ -431,12 +616,17 @@ async def _run_command(
     command: object,
     operation: Callable[[], Awaitable[DecisionView]],
 ) -> DecisionView:
-    return await store.execute(
+    view = await store.execute(
         principal=principal.subject,
         idempotency_key=idempotency_key,
         fingerprint=_fingerprint(action, decision_id, command),
         operation=operation,
     )
+    if catalog_store is not None:
+        await catalog_store.record_decision(
+            principal=principal.subject, view=view, updated_at=utc_now()
+        )
+    return view
 
 
 def _fingerprint(action: str, decision_id: UUID | None, command: object) -> str:
@@ -485,6 +675,48 @@ def _error_models(*status_codes: int) -> dict[int, dict[str, object]]:
 
 
 def _private_report_headers() -> dict[str, str]:
+    return {
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+    }
+
+
+def _respond_async(prefer: str | None) -> bool:
+    if prefer is None:
+        return False
+    return any(item.strip().lower() == "respond-async" for item in prefer.split(","))
+
+
+def _require_operation_store(store: OperationStore | None) -> OperationStore:
+    if store is None:
+        raise StarletteHTTPException(status_code=503)
+    return store
+
+
+def _accepted_operation(receipt: OperationReceipt) -> JSONResponse:
+    return JSONResponse(
+        status_code=202,
+        content=receipt.model_dump(mode="json"),
+        headers={
+            "Preference-Applied": "respond-async",
+            "Location": f"/v1/operations/{receipt.operation_id}",
+            **_private_operation_headers(),
+        },
+    )
+
+
+async def _authorize_operation(
+    authorizer: DecisionAuthorizer,
+    principal: ApiPrincipal,
+    receipt: OperationReceipt,
+) -> None:
+    if receipt.kind is OperationKind.CREATE_DECISION:
+        await authorizer.authorize(principal, None, "decision:create")
+    else:
+        await authorizer.authorize(principal, receipt.decision_id, "decision:read")
+
+
+def _private_operation_headers() -> dict[str, str]:
     return {
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",

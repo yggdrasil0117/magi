@@ -26,6 +26,8 @@ test = [
 
 [project.scripts]
 magi-report = "magi.clients.report_cli:main"
+magi = "magi.clients.workflow_cli:main"
+magi-tui = "magi.clients.tui:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/magi"]

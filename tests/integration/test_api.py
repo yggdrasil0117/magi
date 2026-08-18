@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
@@ -18,12 +18,22 @@ from magi.api import (
 from magi.arbitration import DeterministicArbiter
 from magi.application import (
     DecisionApplicationService,
+    DecisionCatalog,
+    DecisionHistory,
     DecisionPreparationFailed,
     DecisionPreparationRequest,
     DecisionView,
     DecisionViewProjector,
     DecisionWorkflowConflict,
     DecisionWorkflowNotFound,
+    OperationEvent,
+    OperationEventPage,
+    OperationEventType,
+    OperationKind,
+    OperationInbox,
+    OperationReceipt,
+    OperationStage,
+    OperationStatus,
 )
 from magi.agents import ScriptedPerspectiveRunner
 from magi.domain import AgentName
@@ -125,12 +135,113 @@ class FakeReadinessProbe:
         return self.ready
 
 
+class FakeOperationStore:
+    def __init__(self) -> None:
+        self.receipts: dict[tuple[str, UUID], OperationReceipt] = {}
+        self.accept_calls: list[dict[str, object]] = []
+        self.catalog: dict[tuple[str, UUID, int], DecisionView] = {}
+
+    async def accept(self, **kwargs) -> OperationReceipt:
+        self.accept_calls.append(kwargs)
+        receipt = OperationReceipt(
+            operation_id=uuid4(),
+            kind=kwargs["kind"],
+            status=OperationStatus.ACCEPTED,
+            stage=OperationStage.QUEUED,
+            decision_id=kwargs["decision_id"],
+            decision_version=kwargs["decision_version"],
+            created_at=kwargs["accepted_at"],
+            updated_at=kwargs["accepted_at"],
+            last_event_sequence=1,
+            next_poll_after_ms=1000,
+        )
+        self.receipts[(kwargs["principal"], receipt.operation_id)] = receipt
+        return receipt
+
+    async def get(self, *, principal: str, operation_id: UUID):
+        return self.receipts.get((principal, operation_id))
+
+    async def inbox(self, *, principal: str, limit: int = 50):
+        receipts = tuple(
+            receipt for (owner, _), receipt in self.receipts.items()
+            if owner == principal
+        )[:limit]
+        return OperationInbox(
+            operations=receipts,
+            active_count=sum(
+                item.status in {OperationStatus.ACCEPTED, OperationStatus.RUNNING}
+                for item in receipts
+            ),
+            failed_count=sum(item.status is OperationStatus.FAILED for item in receipts),
+        )
+
+    async def record_decision(self, *, principal: str, view, updated_at):
+        self.catalog[(principal, view.decision_id, view.version)] = view
+
+    async def decisions(self, *, principal: str, limit: int = 50):
+        from magi.application import DecisionCatalogEntry
+        entries = tuple(
+            DecisionCatalogEntry(
+                decision_id=view.decision_id, version=view.version,
+                title=view.case.title, state=view.state.value,
+                risk_level=view.case.risk_level.value,
+                data_classification=view.case.data_classification,
+                available_actions=view.available_actions,
+                updated_at=datetime(2026, 8, 18, tzinfo=timezone.utc),
+            )
+            for (owner, _, _), view in self.catalog.items() if owner == principal
+        )[:limit]
+        return DecisionCatalog(
+            decisions=entries,
+            required_action_count=sum(bool(item.available_actions) for item in entries),
+        )
+
+    async def versions(self, *, principal: str, decision_id: UUID):
+        versions = tuple(
+            view for (owner, identity, _), view in self.catalog.items()
+            if owner == principal and identity == decision_id
+        )
+        return DecisionHistory(decision_id=decision_id, versions=versions) if versions else None
+
+    async def events(
+        self, *, principal: str, operation_id: UUID,
+        after_sequence: int = 0, limit: int = 100
+    ):
+        receipt = await self.get(principal=principal, operation_id=operation_id)
+        if receipt is None:
+            return None
+        events = ()
+        if after_sequence < 1:
+            events = (
+                OperationEvent(
+                    operation_id=operation_id,
+                    sequence=1,
+                    event_type=OperationEventType.ACCEPTED,
+                    status=OperationStatus.ACCEPTED,
+                    stage=OperationStage.QUEUED,
+                    occurred_at=receipt.created_at,
+                    message_code="operation_accepted",
+                ),
+            )
+        return OperationEventPage(
+            operation_id=operation_id,
+            after_sequence=after_sequence,
+            events=events,
+            next_after_sequence=events[-1].sequence if events else after_sequence,
+        )
+
+
 class FastApiAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
         self.service = FakeDecisionService()
         self.authorizer = FakeAuthorizer()
+        self.operation_store = FakeOperationStore()
         self.client = TestClient(
-            create_app(self.service, self.authorizer),
+            create_app(
+                self.service,
+                self.authorizer,
+                operation_store=self.operation_store,
+            ),
             raise_server_exceptions=False,
         )
         self.auth = {"Authorization": "Bearer token-user-1"}
@@ -325,6 +436,106 @@ class FastApiAdapterTests(unittest.TestCase):
         self.assertIsInstance(first_request, DecisionPreparationRequest)
         self.assertIsInstance(second_request, DecisionPreparationRequest)
         self.assertEqual(first_request.decision_id, second_request.decision_id)
+
+    def test_async_create_returns_durable_receipt_without_running_service(self) -> None:
+        headers = self.command_headers("async-create-01")
+        headers["Prefer"] = "respond-async"
+
+        response = self.client.post(
+            "/v1/decisions",
+            headers=headers,
+            json={"raw_question": "Should this run asynchronously?"},
+        )
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.headers["preference-applied"], "respond-async")
+        self.assertEqual(response.headers["location"], response.url.path.replace(
+            "/v1/decisions", f"/v1/operations/{response.json()['operation_id']}"
+        ))
+        self.assertEqual(response.json()["status"], "accepted")
+        self.assertEqual(self.service.calls, [])
+        self.assertEqual(
+            self.operation_store.accept_calls[0]["kind"],
+            OperationKind.CREATE_DECISION,
+        )
+
+    def test_async_run_can_be_polled_and_events_replayed(self) -> None:
+        headers = self.command_headers("async-run-0001")
+        headers["Prefer"] = "wait=1, respond-async"
+        accepted = self.client.post(
+            self.path("run"), headers=headers, json={"version": 1}
+        )
+        operation_path = accepted.headers["location"]
+
+        status = self.client.get(operation_path, headers=self.auth)
+        events = self.client.get(operation_path + "/events?after=0&limit=10", headers=self.auth)
+
+        self.assertEqual(accepted.status_code, 202)
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(events.status_code, 200)
+        self.assertEqual(events.json()["events"][0]["event_type"], "accepted")
+        self.assertEqual(self.service.calls[0][0], "get")
+        self.assertIn(
+            ("user-1", DECISION_ID, "decision:read"),
+            self.authorizer.authorizations,
+        )
+
+    def test_operation_owner_is_masked_before_authorization(self) -> None:
+        headers = self.command_headers("async-create-02")
+        headers["Prefer"] = "respond-async"
+        accepted = self.client.post(
+            "/v1/decisions", headers=headers, json={"raw_question": "Private?"}
+        )
+
+        hidden = self.client.get(
+            accepted.headers["location"],
+            headers={"Authorization": "Bearer token-user-2"},
+        )
+
+        self.assertEqual(hidden.status_code, 404)
+        self.assertEqual(hidden.json()["error"]["code"], "operation_not_found")
+
+    def test_operation_inbox_is_owner_scoped_and_authorized(self) -> None:
+        headers = self.command_headers("async-create-03")
+        headers["Prefer"] = "respond-async"
+        self.client.post(
+            "/v1/decisions", headers=headers, json={"raw_question": "Inbox item?"}
+        )
+
+        own = self.client.get("/v1/operations?limit=10", headers=self.auth)
+        other = self.client.get(
+            "/v1/operations?limit=10",
+            headers={"Authorization": "Bearer token-user-2"},
+        )
+
+        self.assertEqual(own.status_code, 200)
+        self.assertEqual(own.json()["active_count"], 1)
+        self.assertEqual(len(own.json()["operations"]), 1)
+        self.assertEqual(other.status_code, 200)
+        self.assertEqual(other.json()["operations"], [])
+        self.assertEqual(own.headers["cache-control"], "private, no-store")
+
+    def test_decision_catalog_and_version_history_are_explicit_resources(self) -> None:
+        response = self.client.post(
+            self.path("confirm"),
+            headers=self.command_headers("catalog-confirm-1"),
+            json={
+                "version": 1,
+                "confirmed_at": "2026-08-18T15:00:00+00:00",
+            },
+        )
+        decision_id = response.json()["decision_id"]
+
+        catalog = self.client.get("/v1/decisions?limit=50", headers=self.auth)
+        history = self.client.get(
+            f"/v1/decisions/{decision_id}/versions", headers=self.auth
+        )
+
+        self.assertEqual(catalog.status_code, 200)
+        self.assertEqual(catalog.json()["decisions"][0]["decision_id"], decision_id)
+        self.assertEqual(catalog.json()["required_action_count"], 1)
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(history.json()["versions"][0]["decision_id"], decision_id)
 
     def test_confirm_requires_valid_idempotency_key_and_body(self) -> None:
         body = {

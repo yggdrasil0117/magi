@@ -19,4 +19,13 @@ text. Redirected output automatically disables ANSI styling. Exit codes are 0
 for decisive reports, 2 for advisory/non-decisive reports, 3 for degraded runs,
 4 for failed runs, and 5 for client or transport errors.
 
-The full interactive Textual workflow remains planned for M5.
+The keyboard-first `magi-tui` workflow now covers inbox, get, history, create,
+confirm, run, cancel, and operation watch through the public API. It deliberately
+uses a dependency-free terminal shell so redirected/no-color behavior remains
+predictable; it never imports the decision engine.
+
+~~~powershell
+$env:MAGI_API_URL = "http://127.0.0.1:8000"
+$env:MAGI_API_TOKEN = "your-token"
+magi-tui
+~~~
