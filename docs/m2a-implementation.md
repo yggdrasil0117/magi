@@ -8,7 +8,7 @@ Architecture version: 0.2
 
 - JSON-serializable MagiGraphState with reducers for parallel first and review ballots.
 - LangGraph StateGraph builder with explicit fan-out and fan-in.
-- Human confirmation interrupt and cancellation branch.
+- Human confirmation interrupt, explicit run interrupt, and cancellation branches.
 - Evidence validation before any perspective runs.
 - Three isolated first-ballot nodes.
 - Deterministic first-round assessment and conditional routing.
@@ -26,9 +26,11 @@ START
   -> confirm_case [interrupt]
        -> mark_cancelled -> END
        -> validate_evidence
-            -> first_melchior
-            -> first_balthasar
-            -> first_casper
+            -> await_run [interrupt]
+                 -> mark_cancelled -> END
+                 -> first_melchior
+                 -> first_balthasar
+                 -> first_casper
                  -> assess_first
                       -> arbitrate -> END
                       -> begin_review
@@ -41,6 +43,8 @@ START
 ## State ownership
 
 - LangGraph checkpoint state controls progress and recovery.
+- Confirmation freezes the case but does not start voting; an explicit run command
+  resumes the second interrupt.
 - DecisionCase, ballots, and ArbitrationResult remain validated domain records.
 - PostgreSQL DecisionRecord remains the future canonical audit source.
 - LangGraph checkpoint data must not be exposed directly to clients.

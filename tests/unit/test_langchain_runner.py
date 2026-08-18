@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 from magi.agents import (
@@ -16,7 +17,14 @@ from magi.agents import (
     PerspectiveSkillLoader,
     RetryPolicy,
 )
-from magi.domain import AgentName, EvidenceQuality, Stance
+from magi.domain import (
+    AgentName,
+    DataClassification,
+    EvidenceItem,
+    EvidenceQuality,
+    Stance,
+    VerificationStatus,
+)
 from tests.fixtures.factories import make_ballot, make_case, make_snapshot
 
 
@@ -158,6 +166,48 @@ class LangChainPerspectiveRunnerTests(unittest.IsolatedAsyncioTestCase):
                 case,
                 make_snapshot(case),
             )
+
+    async def test_restricted_evidence_never_enters_model_context(self) -> None:
+        case = make_case()
+        snapshot = make_snapshot(case)
+        restricted = EvidenceItem(
+            evidence_id="E-SECRET",
+            source_type="private_note",
+            source="restricted.txt",
+            captured_at=datetime(2026, 8, 18, 8, 0, tzinfo=timezone.utc),
+            content_hash="f" * 64,
+            excerpt="Never send this restricted excerpt to a model.",
+            verification_status=VerificationStatus.UNVERIFIED,
+            classification=DataClassification.RESTRICTED,
+        )
+        snapshot = snapshot.model_copy(
+            update={"evidence": (*snapshot.evidence, restricted)}
+        )
+        runner, models = self.make_runner(
+            make_draft(evidence_refs=("E-SECRET",))
+        )
+
+        with self.assertRaisesRegex(PerspectiveExecutionError, "frozen snapshot"):
+            await runner.first_ballot(AgentName.MELCHIOR, case, snapshot)
+
+        human_prompt = models[AgentName.MELCHIOR].inputs[0][1][1]
+        self.assertNotIn("E-SECRET", human_prompt)
+        self.assertNotIn("Never send this restricted excerpt", human_prompt)
+
+    async def test_restricted_case_never_enters_external_model(self) -> None:
+        case = make_case().model_copy(
+            update={"data_classification": DataClassification.RESTRICTED}
+        )
+        runner, models = self.make_runner()
+
+        with self.assertRaisesRegex(PerspectiveExecutionError, "restricted"):
+            await runner.first_ballot(
+                AgentName.MELCHIOR,
+                case,
+                make_snapshot(case),
+            )
+
+        self.assertEqual(models[AgentName.MELCHIOR].inputs, [])
 
     async def test_review_receives_only_sanitized_peer_summaries(self) -> None:
         case = make_case()

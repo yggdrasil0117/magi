@@ -19,6 +19,7 @@ from magi.domain import (
     AgentName,
     Ballot,
     ConstraintClaim,
+    DataClassification,
     DecisionCase,
     EvidenceQuality,
     EvidenceSnapshot,
@@ -258,6 +259,7 @@ class LangChainPerspectiveRunner:
         case: DecisionCase,
         snapshot: EvidenceSnapshot,
     ) -> Ballot:
+        self._require_model_permitted(case)
         return await self._execute_ballot(
             agent,
             case,
@@ -274,6 +276,7 @@ class LangChainPerspectiveRunner:
         previous_ballot: Ballot,
         peer_summaries: tuple[PeerBallotSummary, ...],
     ) -> Ballot:
+        self._require_model_permitted(case)
         if previous_ballot.agent is not agent:
             raise PerspectiveExecutionError("review assignment does not match previous ballot")
         if len(peer_summaries) != 2 or any(
@@ -297,6 +300,13 @@ class LangChainPerspectiveRunner:
             round_number=2,
             previous_ballot=previous_ballot,
         )
+
+    @staticmethod
+    def _require_model_permitted(case: DecisionCase) -> None:
+        if case.data_classification is DataClassification.RESTRICTED:
+            raise PerspectiveExecutionError(
+                "restricted decisions cannot be sent to an external perspective model"
+            )
 
     async def _execute_ballot(
         self,
@@ -501,12 +511,23 @@ class LangChainPerspectiveRunner:
         previous_ballot: Ballot | None = None,
         peer_summaries: tuple[PeerBallotSummary, ...] = (),
     ) -> list[tuple[str, str]]:
+        visible_evidence = tuple(
+            item
+            for item in snapshot.evidence
+            if item.classification is not DataClassification.RESTRICTED
+        )
+        model_snapshot = snapshot.model_dump(mode="json")
+        model_snapshot["evidence"] = [
+            item.model_dump(mode="json") for item in visible_evidence
+        ]
         payload: dict[str, Any] = {
             "round": round_number,
             "available_option_ids": [option.id for option in case.options],
-            "available_evidence_ids": [item.evidence_id for item in snapshot.evidence],
+            "available_evidence_ids": [
+                item.evidence_id for item in visible_evidence
+            ],
             "decision_case": case.model_dump(mode="json"),
-            "evidence_snapshot": snapshot.model_dump(mode="json"),
+            "evidence_snapshot": model_snapshot,
         }
         if previous_ballot is not None:
             payload["previous_ballot"] = previous_ballot.model_dump(mode="json")
@@ -543,7 +564,11 @@ class LangChainPerspectiveRunner:
             raise PerspectiveExecutionError(
                 f"{agent.value} selected an option outside the confirmed case"
             )
-        evidence_ids = {item.evidence_id for item in snapshot.evidence}
+        evidence_ids = {
+            item.evidence_id
+            for item in snapshot.evidence
+            if item.classification is not DataClassification.RESTRICTED
+        }
         cited_ids = set(draft.evidence_refs)
         for claim in draft.constraint_claims:
             cited_ids.update(claim.evidence_refs)

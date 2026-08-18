@@ -85,7 +85,7 @@ class ModelRunnerWorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
         interrupted = await graph.ainvoke(initial_state, config=config)
         self.assertIn("__interrupt__", interrupted)
-        completed = await graph.ainvoke(
+        ready = await graph.ainvoke(
             Command(
                 resume={
                     "confirmed": True,
@@ -99,6 +99,11 @@ class ModelRunnerWorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     ).isoformat(),
                 }
             ),
+            config=config,
+        )
+        self.assertIn("__interrupt__", ready)
+        completed = await graph.ainvoke(
+            Command(resume={"start": True}),
             config=config,
         )
 

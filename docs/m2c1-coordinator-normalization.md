@@ -67,6 +67,6 @@ Provider error text and malformed model output are converted into sanitized
 
 ## Next increment
 
-M2c-2 should add the application service that stores prepared cases, resumes the
-LangGraph confirmation interrupt, projects a shared `DecisionView`, and provides
-one execution boundary for the API, Web, TUI, and CLI.
+M2c-2 now provides the application service, confirmation and run gates, restart
+reads, and shared `DecisionView`. The next increment can expose this boundary
+through FastAPI without importing agent runners into any client.

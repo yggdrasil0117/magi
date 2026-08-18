@@ -46,6 +46,16 @@ def build_langgraph_workflow(
         )
         return nodes.apply_confirmation(state, resume_value)
 
+    def await_run(state: MagiGraphState) -> dict[str, Any]:
+        resume_value = interrupt(
+            {
+                "type": "run_start_required",
+                "decision_id": state["case"]["decision_id"],
+                "decision_version": state["case"]["version"],
+            }
+        )
+        return nodes.apply_run_command(state, resume_value)
+
     async def first_melchior(state: MagiGraphState) -> dict[str, Any]:
         return await nodes.run_first_ballot(AgentName.MELCHIOR, state)
 
@@ -67,6 +77,8 @@ def build_langgraph_workflow(
     builder.add_node("prepare_case", nodes.prepare_case)
     builder.add_node("confirm_case", confirm_case)
     builder.add_node("validate_evidence", nodes.validate_evidence)
+    builder.add_node("await_run", await_run)
+    builder.add_node("begin_first", nodes.begin_first)
     builder.add_node("first_melchior", first_melchior)
     builder.add_node("first_balthasar", first_balthasar)
     builder.add_node("first_casper", first_casper)
@@ -90,9 +102,18 @@ def build_langgraph_workflow(
     )
     builder.add_edge("mark_cancelled", END)
 
-    builder.add_edge("validate_evidence", "first_melchior")
-    builder.add_edge("validate_evidence", "first_balthasar")
-    builder.add_edge("validate_evidence", "first_casper")
+    builder.add_edge("validate_evidence", "await_run")
+    builder.add_conditional_edges(
+        "await_run",
+        nodes.route_after_run,
+        {
+            "continue": "begin_first",
+            "cancelled": "mark_cancelled",
+        },
+    )
+    builder.add_edge("begin_first", "first_melchior")
+    builder.add_edge("begin_first", "first_balthasar")
+    builder.add_edge("begin_first", "first_casper")
     builder.add_edge(
         ["first_melchior", "first_balthasar", "first_casper"],
         "assess_first",

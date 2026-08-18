@@ -14,6 +14,8 @@ M2b-2b adds a shared PostgreSQL runtime for durable invocation records, canonica
 
 M2c-1 adds the non-voting Coordinator normalization boundary. It converts an untrusted raw question into a protocol-1.0 `DecisionCase` draft while application code seals identity, version, raw input, classification, risk floor, and claim verification status. The case remains unconfirmed until the user approves it.
 
+M2c-2 adds the shared application service and sanitized `DecisionView`. Confirmation and voting are separate commands, checkpoint state can be read through a new service instance, partial ballots stay hidden, and restricted evidence is excluded from both clients and model prompts.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -48,3 +50,4 @@ Start with docs/architecture.md, docs/m1-implementation.md, and docs/m2a-impleme
 The current model-adapter increments are documented in docs/m2b1-implementation.md,
 docs/m2b2a-invocation-control.md, and docs/m2b2b-postgres-persistence.md.
 Coordinator normalization is documented in docs/m2c1-coordinator-normalization.md.
+The shared application boundary is documented in docs/m2c2-application-service.md.

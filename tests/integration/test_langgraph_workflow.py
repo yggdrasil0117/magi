@@ -44,7 +44,7 @@ class LangGraphWorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         interrupted = await graph.ainvoke(initial_state, config=config)
         self.assertIn("__interrupt__", interrupted)
 
-        completed = await graph.ainvoke(
+        ready = await graph.ainvoke(
             Command(
                 resume={
                     "confirmed": True,
@@ -60,6 +60,14 @@ class LangGraphWorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
             ),
             config=config,
         )
+        self.assertIn("__interrupt__", ready)
+        self.assertEqual(ready["phase"], "evidence_ready")
+        self.assertEqual(runner.calls, [])
+
+        completed = await graph.ainvoke(
+            Command(resume={"start": True}),
+            config=config,
+        )
         result = ArbitrationResult.model_validate(completed["result"])
         self.assertEqual(result.status, ArbitrationStatus.CONSENSUS)
         self.assertEqual(result.winning_option, "release")
@@ -72,4 +80,3 @@ class LangGraphWorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

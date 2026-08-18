@@ -37,7 +37,18 @@ class ConfirmationPayload(MagiModel):
     def require_confirmation_time(self) -> ConfirmationPayload:
         if self.confirmed and self.confirmed_at is None:
             raise ValueError("confirmed decisions require confirmed_at")
+        if (
+            self.confirmed
+            and self.confirmed_at is not None
+            and self.confirmed_at.tzinfo is None
+        ):
+            raise ValueError("confirmed_at must be timezone-aware")
         return self
+
+
+class RunPayload(MagiModel):
+    start: bool
+    reason: str | None = Field(default=None, max_length=2000)
 
 
 class MagiWorkflowNodes:
@@ -82,7 +93,25 @@ class MagiWorkflowNodes:
             raise ProtocolViolation("evidence snapshot belongs to another decision")
         if snapshot.decision_version != case.version:
             raise ProtocolViolation("evidence snapshot version does not match the decision")
-        return {"snapshot": _json_record(snapshot), "phase": "first_ballot"}
+        return {"snapshot": _json_record(snapshot), "phase": "evidence_ready"}
+
+    @staticmethod
+    def apply_run_command(
+        state: MagiGraphState,
+        resume_value: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        command = RunPayload.model_validate(resume_value)
+        if not command.start:
+            return {"cancelled": True, "phase": "cancelled"}
+        return {"cancelled": False, "phase": "evidence_ready"}
+
+    @staticmethod
+    def route_after_run(state: MagiGraphState) -> str:
+        return "cancelled" if state.get("cancelled") else "continue"
+
+    @staticmethod
+    def begin_first(state: MagiGraphState) -> dict[str, Any]:
+        return {"phase": "first_ballot"}
 
     async def run_first_ballot(
         self,
@@ -215,4 +244,3 @@ class MagiWorkflowNodes:
             raise PerspectiveExecutionError(
                 f"{agent.value} runner returned a ballot for another decision"
             )
-

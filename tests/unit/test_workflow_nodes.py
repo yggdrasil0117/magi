@@ -131,6 +131,13 @@ class WorkflowNodeTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValidationError, "confirmed_at"):
             ConfirmationPayload(confirmed=True)
 
+    async def test_confirmation_time_must_be_timezone_aware(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "timezone-aware"):
+            ConfirmationPayload(
+                confirmed=True,
+                confirmed_at=datetime(2026, 8, 18, 9, 0),
+            )
+
     async def test_first_ballot_events_do_not_disclose_votes(self) -> None:
         case, _, nodes, state = self.make_nodes()
         state = await self.prepare_confirm_and_validate(nodes, state)
@@ -177,6 +184,28 @@ class WorkflowNodeTests(unittest.IsolatedAsyncioTestCase):
         evidence_update = nodes.validate_evidence(state)
         evidence_event = projector.project("validate_evidence", evidence_update)
         self.assertEqual(evidence_event.type, "evidence.snapshot_created")
+
+    async def test_run_requires_explicit_start_and_can_still_cancel(self) -> None:
+        case, runner, nodes, state = self.make_nodes()
+        state = await self.prepare_confirm_and_validate(nodes, state)
+
+        started = nodes.apply_run_command(state, {"start": True})
+        self.assertEqual(nodes.route_after_run(merge_state(state, started)), "continue")
+        start_event = PublicEventProjector(case.decision_id, case.version).project(
+            "await_run",
+            started,
+        )
+        self.assertEqual(start_event.type, "run.started")
+
+        cancelled = nodes.apply_run_command(
+            state,
+            {"start": False, "reason": "Revise options first."},
+        )
+        self.assertEqual(
+            nodes.route_after_run(merge_state(state, cancelled)),
+            "cancelled",
+        )
+        self.assertEqual(runner.calls, [])
 
 
 if __name__ == "__main__":

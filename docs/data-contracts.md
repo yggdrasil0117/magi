@@ -164,3 +164,9 @@ Internal diagnostics belong in the audit record, not public_payload.
 DecisionRecord is the internal append-only aggregate. It may include sanitized prompts, tool requests, errors, retry metadata, model identifiers, cost, and latency.
 
 DecisionView is the client projection used by Web, TUI, and CLI. It excludes secrets, hidden instructions, private working memory, restricted evidence, other users' data, and unreleased first-round ballots.
+
+M2c-2 concretely includes the confirmed case, non-restricted evidence, lifecycle
+state, allowed commands, released ballots, and final arbitration result. It
+contains no LangGraph configuration or raw checkpoint metadata. First ballots
+appear only after `first_assessment`; review ballots replace them only when a
+final result exists.

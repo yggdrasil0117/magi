@@ -9,7 +9,7 @@ from .state_machine import (
 from .events import PublicEventProjector
 from .graph_state import MagiGraphState
 from .langgraph_workflow import LangGraphUnavailable, build_langgraph_workflow
-from .workflow_nodes import ConfirmationPayload, MagiWorkflowNodes
+from .workflow_nodes import ConfirmationPayload, MagiWorkflowNodes, RunPayload
 
 __all__ = [
     "ALLOWED_TRANSITIONS",
@@ -20,6 +20,7 @@ __all__ = [
     "MagiGraphState",
     "MagiWorkflowNodes",
     "PublicEventProjector",
+    "RunPayload",
     "TransitionRecord",
     "build_langgraph_workflow",
 ]

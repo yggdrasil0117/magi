@@ -179,6 +179,19 @@ class LangChainCoordinatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("RuntimeError", str(captured.exception))
         self.assertNotIn("secret provider payload", str(captured.exception))
 
+    async def test_restricted_decision_never_enters_external_model(self) -> None:
+        coordinator, model = self.make_coordinator(make_draft())
+
+        with self.assertRaisesRegex(CoordinatorExecutionError, "restricted"):
+            await coordinator.normalize(
+                NormalizationRequest(
+                    raw_question="This decision contains restricted data.",
+                    data_classification=DataClassification.RESTRICTED,
+                )
+            )
+
+        self.assertEqual(model.inputs, [])
+
 
 if __name__ == "__main__":
     unittest.main()

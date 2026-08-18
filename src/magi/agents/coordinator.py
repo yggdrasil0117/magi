@@ -198,6 +198,10 @@ class LangChainCoordinator:
         )
 
     async def normalize(self, request: NormalizationRequest) -> DecisionCase:
+        if request.data_classification is DataClassification.RESTRICTED:
+            raise CoordinatorExecutionError(
+                "restricted decisions cannot be sent to an external Coordinator model"
+            )
         messages = self._messages(request)
         try:
             output = await self._model.ainvoke(messages)

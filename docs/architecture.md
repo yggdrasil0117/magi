@@ -83,12 +83,17 @@ Apply decision-protocol.md using ordinary application code. Produce one Arbitrat
 
 Build DecisionView from stored records. Optional language polishing cannot change votes, risks, conditions, evidence references, or status. Structured records remain authoritative.
 
+M2c-2 implements the first deterministic `DecisionView` projector. It releases no
+partial first-round ballots, switches to review ballots only after arbitration,
+and excludes restricted evidence. Language polishing remains deferred.
+
 ## State machine
 
 ~~~text
 CREATED
   -> NORMALIZED
-  -> EVIDENCE_READY
+  -> WAITING_FOR_USER
+  -> EVIDENCE_READY (confirmed, waiting for explicit run)
   -> FIRST_BALLOT
   -> CROSS_REVIEW (when required)
   -> ARBITRATED

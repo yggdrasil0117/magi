@@ -58,6 +58,13 @@ class PublicEventProjector:
         elif node_name == "validate_evidence":
             event_type = "evidence.snapshot_created"
             payload = {}
+        elif node_name == "await_run":
+            event_type = (
+                "decision.cancelled"
+                if update.get("cancelled")
+                else "run.started"
+            )
+            payload = {"cancelled": bool(update.get("cancelled", False))}
         elif node_name in FIRST_AGENT_NODES:
             actor = FIRST_AGENT_NODES[node_name]
             event_type = "agent.completed"

@@ -20,7 +20,7 @@ Exit criterion: all arbitration outcomes are reproducible from fixtures.
 
 ## M2: Three perspectives
 
-Status: M2a through M2c-1 implemented and locally verified.
+Status: M2a through M2c-2 implemented and locally verified.
 
 - Add LangGraph Graph API orchestration and PostgreSQL checkpointing.
 - Implement Coordinator.
@@ -42,6 +42,9 @@ the current workstation has no local PostgreSQL service, so that test is skipped
 M2c-1 adds the non-voting Coordinator model boundary and seals every field that
 must remain under application authority. It deliberately does not add a fourth
 persona or expose the perspective agents before user confirmation.
+M2c-2 adds the shared application service, an explicit run gate after user
+confirmation, restart-safe checkpoint reads, and a sanitized `DecisionView` for
+all future clients.
 
 ## M3: Cross-review
 

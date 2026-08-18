@@ -34,12 +34,15 @@ Trusted only after validation:
 | Prompt injection in evidence | Separate instruction and data fields; enforce tool permissions outside the model |
 | Cross-user data leak | Authorization on every resource and event subscription; row-level isolation |
 | Premature vote disclosure | Release first-round ballots atomically after all three close |
+| Partial review vote disclosure | Keep first ballots visible during review; release review ballots only with final arbitration |
 | Fabricated citation | Require evidence IDs that exist in the frozen snapshot |
 | Evidence replacement | Store content hash and immutable snapshot version |
 | Sensitive data in logs | Classify and redact before logging or client projection |
 | Model prompt copied into telemetry | Store a SHA-256 prompt digest, not raw prompt content |
 | Coordinator overwrites authoritative input | Seal raw question, ID, version, classification, and risk floor in application code |
 | User assertion promoted to fact | Seal normalized claims as user-asserted with no evidence references |
+| Restricted evidence reaches model or client | Filter it from perspective prompts and DecisionView; reject citations |
+| Client selects another checkpoint | Derive thread ID from authorized decision ID and version inside the application service |
 | Secret exposure | Keep credentials in the server-side gateway; never place them in prompts |
 | Duplicate run | Require idempotency keys and stage transition guards |
 | Retry counted as another vote | Reference attempts in audit; count one accepted ballot per agent and round |

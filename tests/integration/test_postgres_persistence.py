@@ -86,7 +86,7 @@ class PostgresPersistenceIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 runner,
                 checkpointer=second_runtime.checkpointer,
             )
-            completed = await graph.ainvoke(
+            ready = await graph.ainvoke(
                 Command(
                     resume={
                         "confirmed": True,
@@ -100,6 +100,17 @@ class PostgresPersistenceIntegrationTests(unittest.IsolatedAsyncioTestCase):
                         ).isoformat(),
                     }
                 ),
+                config=config,
+            )
+            self.assertIn("__interrupt__", ready)
+
+        async with PostgresPersistenceRuntime(POSTGRES_DSN) as third_runtime:
+            graph = build_langgraph_workflow(
+                runner,
+                checkpointer=third_runtime.checkpointer,
+            )
+            completed = await graph.ainvoke(
+                Command(resume={"start": True}),
                 config=config,
             )
 
