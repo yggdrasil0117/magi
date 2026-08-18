@@ -75,6 +75,9 @@ Each receives the same DecisionCase and EvidenceSnapshot plus its own instructio
 
 Use LangGraph from M2 to run agents concurrently, checkpoint stages, pause for user confirmation, resume failures, reveal ballots only after the first round closes, and run one cross-review when required. The orchestrator cannot change votes. LangGraph checkpoints are operational state, not the canonical audit or arbitration record.
 
+Decision thread identity belongs to the orchestration layer. Infrastructure may
+reuse it, but the application layer does not import PostgreSQL adapters.
+
 ### Arbiter
 
 Apply decision-protocol.md using ordinary application code. Produce one ArbitrationResult and retain all referenced ballots. Do not use a judging model.

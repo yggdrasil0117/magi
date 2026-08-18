@@ -14,8 +14,7 @@ from magi.domain import (
     EvidenceSnapshot,
     ProtocolViolation,
 )
-from magi.infrastructure import decision_thread_id
-from magi.orchestration import ConfirmationPayload, RunPayload
+from magi.orchestration import ConfirmationPayload, RunPayload, decision_thread_id
 
 from .models import DecisionView, DecisionViewProjector
 

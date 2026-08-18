@@ -16,5 +16,7 @@ Implemented routes:
 - `POST /v1/decisions/{decision_id}/run`
 - `POST /v1/decisions/{decision_id}/cancel`
 
-Production composition, durable HTTP-command idempotency, creation/preparation,
-history, reports, and WebSocket events remain separate increments.
+M2c-4a provides `PostgresCommandIdempotencyStore`; the production composition
+root must inject it into `create_app`. Production composition,
+creation/preparation, history, reports, and WebSocket events remain separate
+increments.

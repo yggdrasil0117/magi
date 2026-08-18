@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from typing import Any, AsyncIterator
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from pydantic import ValidationError
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
@@ -19,6 +21,13 @@ from magi.agents.invocation import (
     InvocationStatus,
     ModelInvocationRecord,
 )
+from magi.application import (
+    CommandIdempotencyConflict,
+    CommandIdempotencyStore,
+    DecisionView,
+)
+from magi.domain import ProtocolViolation
+from magi.orchestration import decision_thread_id
 
 
 INVOCATION_SCHEMA = (
@@ -59,6 +68,24 @@ INVOCATION_SCHEMA = (
     """
     CREATE INDEX IF NOT EXISTS magi_model_invocations_idempotency_idx
     ON magi_model_invocations (idempotency_key, started_at)
+    """,
+)
+
+COMMAND_IDEMPOTENCY_SCHEMA = (
+    """
+    CREATE TABLE IF NOT EXISTS magi_api_command_results (
+        storage_key CHAR(64) PRIMARY KEY,
+        principal_digest CHAR(64) NOT NULL,
+        idempotency_key_digest CHAR(64) NOT NULL,
+        fingerprint CHAR(64) NOT NULL,
+        response JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (principal_digest, idempotency_key_digest)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS magi_api_command_results_created_idx
+    ON magi_api_command_results (created_at)
     """,
 )
 
@@ -152,6 +179,87 @@ class PostgresInvocationLedger(InvocationLedger):
             yield connection
 
 
+class PostgresCommandIdempotencyStore(CommandIdempotencyStore):
+    """Durable principal-scoped command results with a cross-process guard."""
+
+    def __init__(self, pool: AsyncConnectionPool[Any]) -> None:
+        self._pool = pool
+
+    async def setup(self) -> None:
+        async with self._pool.connection() as connection:
+            async with connection.transaction():
+                for statement in COMMAND_IDEMPOTENCY_SCHEMA:
+                    await connection.execute(statement)
+
+    async def execute(
+        self,
+        *,
+        principal: str,
+        idempotency_key: str,
+        fingerprint: str,
+        operation: Callable[[], Awaitable[DecisionView]],
+    ) -> DecisionView:
+        storage_key, principal_digest, key_digest = _command_storage_keys(
+            principal,
+            idempotency_key,
+        )
+        if len(fingerprint) != 64:
+            raise ValueError("command fingerprint must be a 64-character digest")
+        try:
+            bytes.fromhex(fingerprint)
+        except ValueError as exc:
+            raise ValueError("command fingerprint must be hexadecimal") from exc
+
+        lock_id = _advisory_lock_id(storage_key)
+        async with self._pool.connection() as connection:
+            await connection.execute("SELECT pg_advisory_lock(%s)", (lock_id,))
+            try:
+                cursor = await connection.execute(
+                    """
+                    SELECT fingerprint, response
+                    FROM magi_api_command_results
+                    WHERE storage_key = %s
+                    """,
+                    (storage_key,),
+                )
+                row = await cursor.fetchone()
+                if row is not None:
+                    if row["fingerprint"] != fingerprint:
+                        raise CommandIdempotencyConflict(
+                            "idempotency key was already used for another command"
+                        )
+                    try:
+                        return DecisionView.model_validate(row["response"])
+                    except ValidationError as exc:
+                        raise ProtocolViolation(
+                            "persisted API command response is invalid"
+                        ) from exc
+
+                view = await operation()
+                async with connection.transaction():
+                    await connection.execute(
+                        """
+                        INSERT INTO magi_api_command_results (
+                            storage_key, principal_digest,
+                            idempotency_key_digest, fingerprint, response
+                        ) VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (
+                            storage_key,
+                            principal_digest,
+                            key_digest,
+                            fingerprint,
+                            Jsonb(view.model_dump(mode="json")),
+                        ),
+                    )
+                return view
+            finally:
+                await connection.execute(
+                    "SELECT pg_advisory_unlock(%s)",
+                    (lock_id,),
+                )
+
+
 class PostgresPersistenceRuntime:
     """Own one pool shared by the MAGI ledger and LangGraph checkpointer."""
 
@@ -164,6 +272,10 @@ class PostgresPersistenceRuntime:
     ) -> None:
         if not conninfo.strip():
             raise ValueError("PostgreSQL connection string is required")
+        if min_size < 0 or max_size < 2 or min_size > max_size:
+            raise ValueError(
+                "PostgreSQL pool requires 0 <= min_size <= max_size and max_size >= 2"
+            )
         self.pool = AsyncConnectionPool(
             conninfo,
             kwargs={
@@ -177,6 +289,7 @@ class PostgresPersistenceRuntime:
             name="magi-postgres",
         )
         self.invocation_ledger = PostgresInvocationLedger(self.pool)
+        self.command_idempotency_store = PostgresCommandIdempotencyStore(self.pool)
         self._checkpointer: AsyncPostgresSaver | None = None
         self._opened = False
 
@@ -202,6 +315,7 @@ class PostgresPersistenceRuntime:
         try:
             if setup:
                 await self.invocation_ledger.setup()
+                await self.command_idempotency_store.setup()
                 await self._checkpointer.setup()
         except Exception:
             self._checkpointer = None
@@ -224,15 +338,6 @@ class PostgresPersistenceRuntime:
         await self.close()
 
 
-def decision_thread_id(decision_id: object, version: int) -> str:
-    if version < 1:
-        raise ValueError("decision version must be positive")
-    thread_id = f"{decision_id}:{version}"
-    if len(thread_id) > 255:
-        raise ValueError("decision thread ID exceeds PostgreSQL checkpointer limit")
-    return thread_id
-
-
 def _advisory_lock_id(idempotency_key: str) -> int:
     if len(idempotency_key) != 64:
         raise ValueError("idempotency key must be a 64-character SHA-256 digest")
@@ -241,6 +346,21 @@ def _advisory_lock_id(idempotency_key: str) -> int:
     except ValueError as exc:
         raise ValueError("idempotency key must be hexadecimal") from exc
     return int.from_bytes(digest_prefix, byteorder="big", signed=True)
+
+
+def _command_storage_keys(
+    principal: str,
+    idempotency_key: str,
+) -> tuple[str, str, str]:
+    if not principal:
+        raise ValueError("command principal is required")
+    if not idempotency_key:
+        raise ValueError("command idempotency key is required")
+    principal_digest = hashlib.sha256(principal.encode("utf-8")).hexdigest()
+    key_digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
+    material = f"magi-api-v1:{principal_digest}:{key_digest}".encode("ascii")
+    storage_key = hashlib.sha256(material).hexdigest()
+    return storage_key, principal_digest, key_digest
 
 
 def _record_parameters(record: ModelInvocationRecord) -> tuple[object, ...]:

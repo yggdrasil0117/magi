@@ -18,6 +18,8 @@ M2c-2 adds the shared application service and sanitized `DecisionView`. Confirma
 
 M2c-3 adds the authenticated FastAPI transport for reading, confirming, running, and cancelling prepared decisions. Mutating commands require principal-scoped idempotency keys and all routes return `DecisionView` or a stable sanitized error envelope.
 
+M2c-4a adds durable PostgreSQL API-command idempotency. Principal and client keys are stored only as SHA-256 digests, duplicate commands are serialized across processes with advisory locks, and the persisted response is schema-validated before reuse.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -54,3 +56,4 @@ docs/m2b2a-invocation-control.md, and docs/m2b2b-postgres-persistence.md.
 Coordinator normalization is documented in docs/m2c1-coordinator-normalization.md.
 The shared application boundary is documented in docs/m2c2-application-service.md.
 The initial HTTP transport is documented in docs/m2c3-fastapi-transport.md.
+Durable API command idempotency is documented in docs/m2c4a-postgres-command-idempotency.md.

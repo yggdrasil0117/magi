@@ -46,6 +46,8 @@ Trusted only after validation:
 | Unauthenticated decision API | Require an injected bearer authenticator and per-decision authorizer; provide no allow-all default |
 | Credential or request-body reflection | Return stable sanitized errors and never include validation bodies or auth-provider detail |
 | Cross-user idempotency collision | Hash and scope command keys by authenticated principal |
+| API idempotency key leaks from database | Persist only principal and key SHA-256 digests, never raw values |
+| Duplicate command across API processes | Hold a PostgreSQL advisory lock through lookup, execution, and result insertion |
 | Secret exposure | Keep credentials in the server-side gateway; never place them in prompts |
 | Duplicate run | Require idempotency keys and stage transition guards |
 | Retry counted as another vote | Reference attempts in audit; count one accepted ballot per agent and round |

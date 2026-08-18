@@ -13,6 +13,7 @@ from magi.agents import (
     ModelTokenUsage,
     ScriptedPerspectiveRunner,
 )
+from magi.application import DecisionView, DecisionViewProjector
 from magi.domain import AgentName, ArbitrationResult, ArbitrationStatus
 from magi.infrastructure import PostgresPersistenceRuntime, decision_thread_id
 from magi.orchestration import build_langgraph_workflow
@@ -38,6 +39,9 @@ class PostgresPersistenceIntegrationTests(unittest.IsolatedAsyncioTestCase):
         ).model_dump(mode="json")
         idempotency_key = uuid4().hex + uuid4().hex
         prompt_digest = uuid4().hex + uuid4().hex
+        command_key = "integration-" + uuid4().hex
+        command_fingerprint = uuid4().hex + uuid4().hex
+        command_calls = 0
         invocation_time = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
         invocation = ModelInvocationRecord(
             idempotency_key=idempotency_key,
@@ -76,12 +80,37 @@ class PostgresPersistenceIntegrationTests(unittest.IsolatedAsyncioTestCase):
             )
             interrupted = await graph.ainvoke(initial_state, config=config)
             self.assertIn("__interrupt__", interrupted)
+            waiting_view = DecisionViewProjector().project(interrupted)
+
+            async def persist_command_view() -> DecisionView:
+                nonlocal command_calls
+                command_calls += 1
+                return waiting_view
+
+            stored_command_view = await first_runtime.command_idempotency_store.execute(
+                principal="integration-user",
+                idempotency_key=command_key,
+                fingerprint=command_fingerprint,
+                operation=persist_command_view,
+            )
 
         async with PostgresPersistenceRuntime(POSTGRES_DSN) as second_runtime:
             async with second_runtime.invocation_ledger.guard(idempotency_key):
                 stored_ballot = await second_runtime.invocation_ledger.get_ballot(
                     idempotency_key
                 )
+
+            async def reject_duplicate_execution() -> DecisionView:
+                raise AssertionError("persisted command must not execute again")
+
+            reused_command_view = (
+                await second_runtime.command_idempotency_store.execute(
+                    principal="integration-user",
+                    idempotency_key=command_key,
+                    fingerprint=command_fingerprint,
+                    operation=reject_duplicate_execution,
+                )
+            )
             graph = build_langgraph_workflow(
                 runner,
                 checkpointer=second_runtime.checkpointer,
@@ -116,6 +145,9 @@ class PostgresPersistenceIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
         result = ArbitrationResult.model_validate(completed["result"])
         self.assertEqual(stored_ballot, canonical_ballot)
+        self.assertEqual(stored_command_view, waiting_view)
+        self.assertEqual(reused_command_view, waiting_view)
+        self.assertEqual(command_calls, 1)
         self.assertEqual(result.status, ArbitrationStatus.CONSENSUS)
         self.assertEqual(result.winning_option, "release")
 

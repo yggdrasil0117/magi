@@ -2,12 +2,14 @@
 
 from .postgres import (
     PostgresInvocationLedger,
+    PostgresCommandIdempotencyStore,
     PostgresPersistenceRuntime,
     decision_thread_id,
 )
 
 __all__ = [
     "PostgresInvocationLedger",
+    "PostgresCommandIdempotencyStore",
     "PostgresPersistenceRuntime",
     "decision_thread_id",
 ]

@@ -48,8 +48,9 @@ Keys are hashed with the authenticated principal before storage, so two users
 may safely use the same client-generated value. The included in-memory store has
 a bounded result cache and fixed lock shards, preventing per-key lock growth.
 
-The store implements `CommandIdempotencyStore` and remains process-local. A
-durable PostgreSQL adapter is required before multiple API processes are enabled.
+The store implements `CommandIdempotencyStore`. M2c-4a now supplies a durable
+PostgreSQL adapter; the in-memory implementation remains the app-factory default
+for isolated tests and must not be selected by the production composition root.
 
 ## Error handling
 
@@ -78,7 +79,7 @@ than pinning those exact patch releases.
 
 ## Next increment
 
-Add durable PostgreSQL command idempotency and the production composition root
-that wires PostgreSQL, model runners, authentication, authorization, and the API
+Add the production composition root that wires PostgreSQL, model runners,
+authentication, authorization, durable command idempotency, and the API
 lifecycle. Then implement prepared-case persistence and the create/prepare REST
 flow before starting client work.
