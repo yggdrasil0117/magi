@@ -8,6 +8,8 @@ M2a adds a LangGraph Graph API builder, JSON-serializable checkpoint state, conf
 
 M2b-1 adds a LangChain/OpenAI structured-output runner. Each LangGraph perspective node loads the shared MAGI protocol and exactly one perspective skill, receives an isolated prompt, and returns a ballot draft. Application code seals authoritative identity, round, decision, option, and evidence boundaries.
 
+M2b-2a adds deterministic model-call idempotency, process-local duplicate suppression, classified retry, `Retry-After` handling, token/latency records, and a replaceable invocation-ledger boundary. Logs contain prompt digests and error types rather than raw prompts or provider error text.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -39,4 +41,5 @@ tests/         Unit, integration, evaluation, and fixture areas
 ~~~
 
 Start with docs/architecture.md, docs/m1-implementation.md, and docs/m2a-implementation.md.
-The current model-adapter increment is documented in docs/m2b1-implementation.md.
+The current model-adapter increments are documented in docs/m2b1-implementation.md
+and docs/m2b2a-invocation-control.md.

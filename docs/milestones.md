@@ -20,7 +20,7 @@ Exit criterion: all arbitration outcomes are reproducible from fixtures.
 
 ## M2: Three perspectives
 
-Status: M2a and M2b-1 implemented and locally verified.
+Status: M2a, M2b-1, and M2b-2a implemented and locally verified.
 
 - Add LangGraph Graph API orchestration and PostgreSQL checkpointing.
 - Implement Coordinator.
@@ -33,6 +33,8 @@ Exit criterion: first-round secrecy and one accepted ballot per perspective are 
 M2a provides the tested graph and scripted runner. M2b-1 adds three isolated
 LangChain/OpenAI structured-output boundaries and loads the shared plus assigned
 perspective skills. Live API evaluation and PostgreSQL checkpointing remain.
+M2b-2a adds idempotent model calls, bounded transient retries, sanitized attempt
+records, token usage, and latency through a persistence-neutral ledger port.
 
 ## M3: Cross-review
 

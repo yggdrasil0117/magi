@@ -65,6 +65,7 @@ MAGI_SKILLS_DIR=...  # optional
 
 - Run a controlled live-model evaluation after the user selects a model and
   supplies an API key locally.
-- Add request idempotency, retry classification, token usage, latency, and cost
-  records.
+- M2b-2a now provides request idempotency, retry classification, token usage,
+  and latency records. Cost calculation remains pending model selection and live
+  evaluation.
 - Add PostgreSQL checkpointing and append-only canonical audit records.

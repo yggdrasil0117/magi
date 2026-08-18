@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import unittest
 from pathlib import Path
 
 from magi.agents import (
     BallotDraft,
+    InMemoryInvocationLedger,
+    InvocationStatus,
     LangChainPerspectiveRunner,
     PeerBallotSummary,
     PerspectiveExecutionError,
     PerspectiveSkillLoader,
+    RetryPolicy,
 )
 from magi.domain import AgentName, EvidenceQuality, Stance
 from tests.fixtures.factories import make_ballot, make_case, make_snapshot
@@ -26,6 +30,27 @@ class FakeStructuredModel:
         if isinstance(self.output, Exception):
             raise self.output
         return self.output
+
+
+class SequencedStructuredModel:
+    def __init__(self, outputs: tuple[object, ...], *, delay: float = 0) -> None:
+        self.outputs = list(outputs)
+        self.delay = delay
+        self.inputs: list[object] = []
+
+    async def ainvoke(self, input: object) -> object:
+        self.inputs.append(input)
+        if self.delay:
+            await asyncio.sleep(self.delay)
+        output = self.outputs.pop(0)
+        if isinstance(output, Exception):
+            raise output
+        return output
+
+
+class FakeRawResponse:
+    def __init__(self, usage_metadata: dict[str, int]) -> None:
+        self.usage_metadata = usage_metadata
 
 
 def make_draft(
@@ -65,6 +90,32 @@ class LangChainPerspectiveRunnerTests(unittest.IsolatedAsyncioTestCase):
         skills_root = Path(__file__).resolve().parents[2] / "skills"
         runner = LangChainPerspectiveRunner(models, PerspectiveSkillLoader(skills_root))
         return runner, models
+
+    def make_controlled_runner(
+        self,
+        model: object,
+        ledger: InMemoryInvocationLedger,
+        *,
+        retry_policy: RetryPolicy | None = None,
+        sleep=asyncio.sleep,
+    ) -> LangChainPerspectiveRunner:
+        models = {
+            agent: (
+                model
+                if agent is AgentName.MELCHIOR
+                else FakeStructuredModel(make_draft())
+            )
+            for agent in AgentName
+        }
+        skills_root = Path(__file__).resolve().parents[2] / "skills"
+        return LangChainPerspectiveRunner(
+            models,
+            PerspectiveSkillLoader(skills_root),
+            model_name="test-model-v1",
+            ledger=ledger,
+            retry_policy=retry_policy,
+            sleep=sleep,
+        )
 
     async def test_first_ballot_uses_only_assigned_skill_and_seals_identity(self) -> None:
         case = make_case()
@@ -163,6 +214,103 @@ class LangChainPerspectiveRunnerTests(unittest.IsolatedAsyncioTestCase):
                 case,
                 make_snapshot(case),
             )
+
+    async def test_success_records_usage_and_reuses_identical_ballot(self) -> None:
+        case = make_case()
+        ledger = InMemoryInvocationLedger()
+        raw = FakeRawResponse(
+            {"input_tokens": 12, "output_tokens": 5, "total_tokens": 17}
+        )
+        model = SequencedStructuredModel(
+            ({"raw": raw, "parsed": make_draft(), "parsing_error": None},)
+        )
+        runner = self.make_controlled_runner(model, ledger)
+
+        first = await runner.first_ballot(
+            AgentName.MELCHIOR,
+            case,
+            make_snapshot(case),
+        )
+        reused = await runner.first_ballot(
+            AgentName.MELCHIOR,
+            case,
+            make_snapshot(case),
+        )
+
+        self.assertEqual(first, reused)
+        self.assertEqual(len(model.inputs), 1)
+        self.assertEqual(
+            tuple(record.status for record in ledger.records),
+            (InvocationStatus.SUCCEEDED, InvocationStatus.REUSED),
+        )
+        self.assertEqual(ledger.records[0].usage.total_tokens, 17)
+        self.assertEqual(ledger.records[0].idempotency_key, ledger.records[1].idempotency_key)
+
+    async def test_concurrent_duplicate_calls_share_one_provider_invocation(self) -> None:
+        case = make_case()
+        ledger = InMemoryInvocationLedger()
+        model = SequencedStructuredModel((make_draft(),), delay=0.01)
+        runner = self.make_controlled_runner(model, ledger)
+
+        first, second = await asyncio.gather(
+            runner.first_ballot(AgentName.MELCHIOR, case, make_snapshot(case)),
+            runner.first_ballot(AgentName.MELCHIOR, case, make_snapshot(case)),
+        )
+
+        self.assertEqual(first.ballot_id, second.ballot_id)
+        self.assertEqual(len(model.inputs), 1)
+        self.assertEqual(len(ledger.records), 2)
+
+    async def test_transient_timeout_retries_once_and_records_both_attempts(self) -> None:
+        case = make_case()
+        ledger = InMemoryInvocationLedger()
+        model = SequencedStructuredModel((TimeoutError("temporary"), make_draft()))
+        delays: list[float] = []
+
+        async def capture_sleep(delay: float) -> None:
+            delays.append(delay)
+
+        runner = self.make_controlled_runner(
+            model,
+            ledger,
+            retry_policy=RetryPolicy(max_attempts=2, initial_backoff_seconds=0.1),
+            sleep=capture_sleep,
+        )
+
+        ballot = await runner.first_ballot(
+            AgentName.MELCHIOR,
+            case,
+            make_snapshot(case),
+        )
+
+        self.assertEqual(ballot.selected_option, "release")
+        self.assertEqual(len(model.inputs), 2)
+        self.assertEqual(delays, [0.1])
+        self.assertEqual(
+            tuple(record.status for record in ledger.records),
+            (InvocationStatus.FAILED, InvocationStatus.SUCCEEDED),
+        )
+        self.assertEqual(tuple(record.attempt for record in ledger.records), (1, 2))
+
+    async def test_authentication_failure_is_not_retried(self) -> None:
+        class AuthenticationError(Exception):
+            pass
+
+        case = make_case()
+        ledger = InMemoryInvocationLedger()
+        model = SequencedStructuredModel((AuthenticationError("bad secret"),))
+        runner = self.make_controlled_runner(model, ledger)
+
+        with self.assertRaisesRegex(PerspectiveExecutionError, "AuthenticationError"):
+            await runner.first_ballot(
+                AgentName.MELCHIOR,
+                case,
+                make_snapshot(case),
+            )
+
+        self.assertEqual(len(model.inputs), 1)
+        self.assertEqual(len(ledger.records), 1)
+        self.assertEqual(ledger.records[0].error_type, "AuthenticationError")
 
     def test_all_three_model_boundaries_are_required(self) -> None:
         skills_root = Path(__file__).resolve().parents[2] / "skills"

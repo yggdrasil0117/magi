@@ -37,9 +37,11 @@ Trusted only after validation:
 | Fabricated citation | Require evidence IDs that exist in the frozen snapshot |
 | Evidence replacement | Store content hash and immutable snapshot version |
 | Sensitive data in logs | Classify and redact before logging or client projection |
+| Model prompt copied into telemetry | Store a SHA-256 prompt digest, not raw prompt content |
 | Secret exposure | Keep credentials in the server-side gateway; never place them in prompts |
 | Duplicate run | Require idempotency keys and stage transition guards |
 | Retry counted as another vote | Reference attempts in audit; count one accepted ballot per agent and round |
+| Provider error leaks sensitive text | Record only the exception type in model-call telemetry |
 | Presenter changes result | Generate from ArbitrationResult and validate invariant fields |
 | Tool or agent loop | Enforce turn, tool, retry, and review limits in code |
 | Correlated model failure | Preserve independent contexts, use high-risk review, and evaluate representative cases |
@@ -55,4 +57,3 @@ Trusted only after validation:
 ## Initial authority
 
 The first release is read-only and advisory. It cannot send messages, modify files, write business data, execute commands, purchase, or control devices. Adding an executor requires a separate threat model and explicit approval workflow.
-
