@@ -2,14 +2,52 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from pydantic import Field, model_validator
 
 from magi.domain.models import MagiModel
+from magi.domain import DataClassification
+
+
+class OperationIdempotencyConflict(RuntimeError):
+    """Raised when an operation key is reused with another request."""
+
+
+class OperationStore(Protocol):
+    async def accept(
+        self,
+        *,
+        principal: str,
+        idempotency_key: str,
+        fingerprint: str,
+        kind: OperationKind,
+        decision_id: UUID,
+        decision_version: int,
+        classification: DataClassification,
+        request_payload: Mapping[str, Any],
+        accepted_at: datetime,
+    ) -> OperationReceipt: ...
+
+    async def get(
+        self,
+        *,
+        principal: str,
+        operation_id: UUID,
+    ) -> OperationReceipt | None: ...
+
+    async def events(
+        self,
+        *,
+        principal: str,
+        operation_id: UUID,
+        after_sequence: int = 0,
+        limit: int = 100,
+    ) -> OperationEventPage | None: ...
 
 
 class OperationKind(StrEnum):

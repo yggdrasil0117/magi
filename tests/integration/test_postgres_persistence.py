@@ -13,8 +13,13 @@ from magi.agents import (
     ModelTokenUsage,
     ScriptedPerspectiveRunner,
 )
-from magi.application import DecisionView, DecisionViewProjector
-from magi.domain import AgentName, ArbitrationResult, ArbitrationStatus
+from magi.application import DecisionView, DecisionViewProjector, OperationKind
+from magi.domain import (
+    AgentName,
+    ArbitrationResult,
+    ArbitrationStatus,
+    DataClassification,
+)
 from magi.infrastructure import PostgresPersistenceRuntime, decision_thread_id
 from magi.orchestration import build_langgraph_workflow
 from tests.fixtures.factories import make_ballot, make_case, make_snapshot
@@ -41,6 +46,8 @@ class PostgresPersistenceIntegrationTests(unittest.IsolatedAsyncioTestCase):
         prompt_digest = uuid4().hex + uuid4().hex
         command_key = "integration-" + uuid4().hex
         command_fingerprint = uuid4().hex + uuid4().hex
+        operation_key = "operation-" + uuid4().hex
+        operation_fingerprint = uuid4().hex + uuid4().hex
         command_calls = 0
         invocation_time = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
         invocation = ModelInvocationRecord(
@@ -93,6 +100,17 @@ class PostgresPersistenceIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 fingerprint=command_fingerprint,
                 operation=persist_command_view,
             )
+            accepted_operation = await first_runtime.operation_store.accept(
+                principal="integration-user",
+                idempotency_key=operation_key,
+                fingerprint=operation_fingerprint,
+                kind=OperationKind.RUN_DECISION,
+                decision_id=case.decision_id,
+                decision_version=case.version,
+                classification=DataClassification.INTERNAL,
+                request_payload={"version": case.version},
+                accepted_at=invocation_time,
+            )
 
         async with PostgresPersistenceRuntime(POSTGRES_DSN) as second_runtime:
             async with second_runtime.invocation_ledger.guard(idempotency_key):
@@ -110,6 +128,21 @@ class PostgresPersistenceIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     fingerprint=command_fingerprint,
                     operation=reject_duplicate_execution,
                 )
+            )
+            reused_operation = await second_runtime.operation_store.accept(
+                principal="integration-user",
+                idempotency_key=operation_key,
+                fingerprint=operation_fingerprint,
+                kind=OperationKind.RUN_DECISION,
+                decision_id=case.decision_id,
+                decision_version=case.version,
+                classification=DataClassification.INTERNAL,
+                request_payload={"version": case.version},
+                accepted_at=invocation_time,
+            )
+            operation_events = await second_runtime.operation_store.events(
+                principal="integration-user",
+                operation_id=accepted_operation.operation_id,
             )
             graph = build_langgraph_workflow(
                 runner,
@@ -148,6 +181,11 @@ class PostgresPersistenceIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stored_command_view, waiting_view)
         self.assertEqual(reused_command_view, waiting_view)
         self.assertEqual(command_calls, 1)
+        self.assertEqual(reused_operation, accepted_operation)
+        self.assertIsNotNone(operation_events)
+        assert operation_events is not None
+        self.assertEqual(len(operation_events.events), 1)
+        self.assertEqual(operation_events.events[0].message_code, "operation_accepted")
         self.assertEqual(result.status, ArbitrationStatus.CONSENSUS)
         self.assertEqual(result.winning_option, "release")
 

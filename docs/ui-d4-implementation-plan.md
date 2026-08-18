@@ -1,6 +1,6 @@
 # UI-D4 production implementation plan
 
-Status: UI-D4a and UI-D4b-1 accepted; UI-D4b-2a async contract proposed
+Status: UI-D4a through UI-D4b-2a accepted; UI-D4b-2b implemented
 
 ## Scope rule
 
@@ -103,7 +103,7 @@ UI-D4b-2 remains blocked on a product/API choice for long-running create and run
 keep a synchronous HTTP request open, or add an accepted command receipt plus
 public event/status replay. The latter remains recommended for reconnect safety.
 
-The durable receipt and replay option is specified in
+The accepted durable receipt and replay option is specified in
 `docs/ui-d4b2-async-operations.md`. Application-level receipt/event models and
-fail-closed lifecycle tests are present; no new endpoint, table, or worker is active
-until that contract is confirmed.
+fail-closed lifecycle tests are present. PostgreSQL operation/event persistence is
+implemented in D4b-2b; endpoints and the worker remain inactive.

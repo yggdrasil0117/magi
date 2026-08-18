@@ -8,7 +8,9 @@ import os
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
+from datetime import datetime
 from typing import Any, AsyncIterator
+from uuid import UUID, uuid5
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -26,8 +28,17 @@ from magi.application import (
     CommandIdempotencyConflict,
     CommandIdempotencyStore,
     DecisionView,
+    OperationEvent,
+    OperationEventPage,
+    OperationEventType,
+    OperationIdempotencyConflict,
+    OperationKind,
+    OperationReceipt,
+    OperationStage,
+    OperationStatus,
+    OperationStore,
 )
-from magi.domain import ProtocolViolation
+from magi.domain import DataClassification, ProtocolViolation
 from magi.orchestration import decision_thread_id
 
 
@@ -87,6 +98,69 @@ COMMAND_IDEMPOTENCY_SCHEMA = (
     """
     CREATE INDEX IF NOT EXISTS magi_api_command_results_created_idx
     ON magi_api_command_results (created_at)
+    """,
+)
+
+OPERATION_NAMESPACE = UUID("d6a00b77-4dd3-4a2e-bab8-f155432f58d1")
+OPERATION_SCHEMA = (
+    """
+    CREATE TABLE IF NOT EXISTS magi_operations (
+        operation_id UUID PRIMARY KEY,
+        storage_key CHAR(64) NOT NULL UNIQUE,
+        principal_digest CHAR(64) NOT NULL,
+        idempotency_key_digest CHAR(64) NOT NULL,
+        fingerprint CHAR(64) NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('create_decision', 'run_decision')),
+        decision_id UUID NOT NULL,
+        decision_version INTEGER NOT NULL CHECK (decision_version >= 1),
+        classification TEXT NOT NULL
+            CHECK (classification IN ('public', 'internal', 'sensitive', 'restricted')),
+        request_payload JSONB NOT NULL,
+        status TEXT NOT NULL
+            CHECK (status IN ('accepted', 'running', 'succeeded', 'failed')),
+        stage TEXT NOT NULL CHECK (stage IN (
+            'queued', 'coordinator', 'first_ballot', 'cross_review',
+            'arbitration', 'reporting', 'complete'
+        )),
+        fencing_token INTEGER NOT NULL DEFAULT 0 CHECK (fencing_token >= 0),
+        lease_owner_digest CHAR(64) NULL,
+        lease_expires_at TIMESTAMPTZ NULL,
+        result JSONB NULL,
+        failure_code TEXT NULL,
+        last_event_sequence INTEGER NOT NULL DEFAULT 1
+            CHECK (last_event_sequence >= 1),
+        created_at TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL,
+        completed_at TIMESTAMPTZ NULL,
+        retention_until TIMESTAMPTZ NULL,
+        UNIQUE (principal_digest, idempotency_key_digest)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS magi_operation_events (
+        operation_id UUID NOT NULL REFERENCES magi_operations(operation_id),
+        sequence INTEGER NOT NULL CHECK (sequence >= 1),
+        event_type TEXT NOT NULL CHECK (event_type IN (
+            'accepted', 'started', 'stage_changed', 'succeeded', 'failed'
+        )),
+        status TEXT NOT NULL
+            CHECK (status IN ('accepted', 'running', 'succeeded', 'failed')),
+        stage TEXT NOT NULL CHECK (stage IN (
+            'queued', 'coordinator', 'first_ballot', 'cross_review',
+            'arbitration', 'reporting', 'complete'
+        )),
+        message_code TEXT NOT NULL,
+        occurred_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (operation_id, sequence)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS magi_operations_claim_idx
+    ON magi_operations (status, lease_expires_at, created_at)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS magi_operations_decision_idx
+    ON magi_operations (decision_id, decision_version, created_at)
     """,
 )
 
@@ -236,6 +310,15 @@ class PostgresCommandIdempotencyStore(CommandIdempotencyStore):
                             "persisted API command response is invalid"
                         ) from exc
 
+                operation_cursor = await connection.execute(
+                    "SELECT 1 FROM magi_operations WHERE storage_key = %s",
+                    (storage_key,),
+                )
+                if await operation_cursor.fetchone() is not None:
+                    raise CommandIdempotencyConflict(
+                        "idempotency key was already used for an async operation"
+                    )
+
                 view = await operation()
                 async with connection.transaction():
                     await connection.execute(
@@ -259,6 +342,195 @@ class PostgresCommandIdempotencyStore(CommandIdempotencyStore):
                     "SELECT pg_advisory_unlock(%s)",
                     (lock_id,),
                 )
+
+
+class PostgresOperationStore(OperationStore):
+    """Durable async operation receipts and append-only public events."""
+
+    def __init__(self, pool: AsyncConnectionPool[Any]) -> None:
+        self._pool = pool
+
+    async def setup(self) -> None:
+        async with self._pool.connection() as connection:
+            async with connection.transaction():
+                for statement in OPERATION_SCHEMA:
+                    await connection.execute(statement)
+
+    async def accept(
+        self,
+        *,
+        principal: str,
+        idempotency_key: str,
+        fingerprint: str,
+        kind: OperationKind,
+        decision_id: UUID,
+        decision_version: int,
+        classification: DataClassification,
+        request_payload: Mapping[str, Any],
+        accepted_at: datetime,
+    ) -> OperationReceipt:
+        storage_key, principal_digest, key_digest = _command_storage_keys(
+            principal,
+            idempotency_key,
+        )
+        _validate_digest(fingerprint, "operation fingerprint")
+        if decision_version < 1:
+            raise ValueError("operation decision version must be positive")
+        if accepted_at.tzinfo is None:
+            raise ValueError("operation acceptance time must be timezone-aware")
+        operation_id = uuid5(OPERATION_NAMESPACE, storage_key)
+        lock_id = _advisory_lock_id(storage_key)
+        async with self._pool.connection() as connection:
+            await connection.execute("SELECT pg_advisory_lock(%s)", (lock_id,))
+            try:
+                cursor = await connection.execute(
+                    """
+                    SELECT * FROM magi_operations
+                    WHERE storage_key = %s
+                    """,
+                    (storage_key,),
+                )
+                existing = await cursor.fetchone()
+                if existing is not None:
+                    if existing["fingerprint"] != fingerprint:
+                        raise OperationIdempotencyConflict(
+                            "idempotency key was already used for another operation"
+                        )
+                    return _operation_receipt(existing)
+
+                sync_cursor = await connection.execute(
+                    "SELECT 1 FROM magi_api_command_results WHERE storage_key = %s",
+                    (storage_key,),
+                )
+                if await sync_cursor.fetchone() is not None:
+                    raise OperationIdempotencyConflict(
+                        "idempotency key was already used for a synchronous command"
+                    )
+
+                async with connection.transaction():
+                    await connection.execute(
+                        """
+                        INSERT INTO magi_operations (
+                            operation_id, storage_key, principal_digest,
+                            idempotency_key_digest, fingerprint, kind,
+                            decision_id, decision_version, classification,
+                            request_payload, status, stage,
+                            last_event_sequence, created_at, updated_at
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                            'accepted', 'queued', 1, %s, %s
+                        )
+                        """,
+                        (
+                            operation_id,
+                            storage_key,
+                            principal_digest,
+                            key_digest,
+                            fingerprint,
+                            kind.value,
+                            decision_id,
+                            decision_version,
+                            classification.value,
+                            Jsonb(dict(request_payload)),
+                            accepted_at,
+                            accepted_at,
+                        ),
+                    )
+                    await connection.execute(
+                        """
+                        INSERT INTO magi_operation_events (
+                            operation_id, sequence, event_type, status,
+                            stage, message_code, occurred_at
+                        ) VALUES (%s, 1, 'accepted', 'accepted', 'queued',
+                                  'operation_accepted', %s)
+                        """,
+                        (operation_id, accepted_at),
+                    )
+                return OperationReceipt(
+                    operation_id=operation_id,
+                    kind=kind,
+                    status=OperationStatus.ACCEPTED,
+                    stage=OperationStage.QUEUED,
+                    decision_id=decision_id,
+                    decision_version=decision_version,
+                    created_at=accepted_at,
+                    updated_at=accepted_at,
+                    last_event_sequence=1,
+                    next_poll_after_ms=1000,
+                )
+            finally:
+                await connection.execute(
+                    "SELECT pg_advisory_unlock(%s)",
+                    (lock_id,),
+                )
+
+    async def get(
+        self,
+        *,
+        principal: str,
+        operation_id: UUID,
+    ) -> OperationReceipt | None:
+        principal_digest = _principal_digest(principal)
+        async with self._pool.connection() as connection:
+            cursor = await connection.execute(
+                """
+                SELECT * FROM magi_operations
+                WHERE operation_id = %s AND principal_digest = %s
+                """,
+                (operation_id, principal_digest),
+            )
+            row = await cursor.fetchone()
+        return None if row is None else _operation_receipt(row)
+
+    async def events(
+        self,
+        *,
+        principal: str,
+        operation_id: UUID,
+        after_sequence: int = 0,
+        limit: int = 100,
+    ) -> OperationEventPage | None:
+        if after_sequence < 0:
+            raise ValueError("operation event cursor cannot be negative")
+        if limit < 1 or limit > 100:
+            raise ValueError("operation event limit must be between 1 and 100")
+        principal_digest = _principal_digest(principal)
+        async with self._pool.connection() as connection:
+            owner_cursor = await connection.execute(
+                """
+                SELECT 1 FROM magi_operations
+                WHERE operation_id = %s AND principal_digest = %s
+                """,
+                (operation_id, principal_digest),
+            )
+            if await owner_cursor.fetchone() is None:
+                return None
+            cursor = await connection.execute(
+                """
+                SELECT operation_id, sequence, event_type, status,
+                       stage, message_code, occurred_at
+                FROM magi_operation_events
+                WHERE operation_id = %s AND sequence > %s
+                ORDER BY sequence ASC
+                LIMIT %s
+                """,
+                (operation_id, after_sequence, limit + 1),
+            )
+            rows = await cursor.fetchall()
+        has_more = len(rows) > limit
+        selected = rows[:limit]
+        try:
+            events = tuple(OperationEvent.model_validate(row) for row in selected)
+            next_after = events[-1].sequence if events else after_sequence
+            return OperationEventPage(
+                operation_id=operation_id,
+                after_sequence=after_sequence,
+                events=events,
+                next_after_sequence=next_after,
+                has_more=has_more,
+            )
+        except ValidationError as exc:
+            raise ProtocolViolation("persisted operation event is invalid") from exc
 
 
 class PostgresPersistenceRuntime:
@@ -291,6 +563,7 @@ class PostgresPersistenceRuntime:
         )
         self.invocation_ledger = PostgresInvocationLedger(self.pool)
         self.command_idempotency_store = PostgresCommandIdempotencyStore(self.pool)
+        self.operation_store = PostgresOperationStore(self.pool)
         self._checkpointer: AsyncPostgresSaver | None = None
         self._opened = False
 
@@ -317,6 +590,7 @@ class PostgresPersistenceRuntime:
             if setup:
                 await self.invocation_ledger.setup()
                 await self.command_idempotency_store.setup()
+                await self.operation_store.setup()
                 await self._checkpointer.setup()
         except Exception:
             self._checkpointer = None
@@ -375,6 +649,52 @@ def _command_storage_keys(
     material = f"magi-api-v1:{principal_digest}:{key_digest}".encode("ascii")
     storage_key = hashlib.sha256(material).hexdigest()
     return storage_key, principal_digest, key_digest
+
+
+def _principal_digest(principal: str) -> str:
+    if not principal:
+        raise ValueError("operation principal is required")
+    return hashlib.sha256(principal.encode("utf-8")).hexdigest()
+
+
+def _validate_digest(value: str, label: str) -> None:
+    if len(value) != 64:
+        raise ValueError(f"{label} must be a 64-character digest")
+    try:
+        bytes.fromhex(value)
+    except ValueError as exc:
+        raise ValueError(f"{label} must be hexadecimal") from exc
+
+
+def _operation_receipt(row: Mapping[str, Any]) -> OperationReceipt:
+    terminal = row["status"] in {
+        OperationStatus.SUCCEEDED.value,
+        OperationStatus.FAILED.value,
+    }
+    try:
+        if row["status"] == OperationStatus.SUCCEEDED.value:
+            DecisionView.model_validate(row.get("result"))
+        elif row.get("result") is not None:
+            raise ProtocolViolation(
+                "non-successful persisted operation contains a result"
+            )
+        return OperationReceipt(
+            operation_id=row["operation_id"],
+            kind=row["kind"],
+            status=row["status"],
+            stage=row["stage"],
+            decision_id=row["decision_id"],
+            decision_version=row["decision_version"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            completed_at=row.get("completed_at"),
+            last_event_sequence=row["last_event_sequence"],
+            next_poll_after_ms=None if terminal else 1000,
+            result_available=row["status"] == OperationStatus.SUCCEEDED.value,
+            failure_code=row.get("failure_code"),
+        )
+    except (KeyError, ValidationError) as exc:
+        raise ProtocolViolation("persisted operation receipt is invalid") from exc
 
 
 def _record_parameters(record: ModelInvocationRecord) -> tuple[object, ...]:

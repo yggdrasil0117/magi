@@ -4,6 +4,7 @@ from .postgres import (
     PostgresInvocationLedger,
     PostgresCommandIdempotencyStore,
     PostgresPersistenceRuntime,
+    PostgresOperationStore,
     decision_thread_id,
 )
 
@@ -11,5 +12,6 @@ __all__ = [
     "PostgresInvocationLedger",
     "PostgresCommandIdempotencyStore",
     "PostgresPersistenceRuntime",
+    "PostgresOperationStore",
     "decision_thread_id",
 ]

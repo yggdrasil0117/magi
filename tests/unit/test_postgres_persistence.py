@@ -7,6 +7,7 @@ import unittest
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from magi.agents import (
     InvocationStatus,
@@ -17,11 +18,17 @@ from magi.application import (
     CommandIdempotencyConflict,
     DecisionView,
     DecisionViewProjector,
+    OperationEventType,
+    OperationIdempotencyConflict,
+    OperationKind,
+    OperationStage,
+    OperationStatus,
 )
-from magi.domain import AgentName, ProtocolViolation
+from magi.domain import AgentName, DataClassification, ProtocolViolation
 from magi.infrastructure import (
     PostgresCommandIdempotencyStore,
     PostgresInvocationLedger,
+    PostgresOperationStore,
     PostgresPersistenceRuntime,
     decision_thread_id,
 )
@@ -40,11 +47,19 @@ class AsyncContext(AbstractAsyncContextManager[Any]):
 
 
 class FakeCursor:
-    def __init__(self, row: dict[str, object] | None = None) -> None:
+    def __init__(
+        self,
+        row: dict[str, object] | None = None,
+        rows: list[dict[str, object]] | None = None,
+    ) -> None:
         self.row = row
+        self.rows = rows or []
 
     async def fetchone(self) -> dict[str, object] | None:
         return self.row
+
+    async def fetchall(self) -> list[dict[str, object]]:
+        return self.rows
 
 
 class FakeConnection:
@@ -53,9 +68,13 @@ class FakeConnection:
         ballot: dict[str, object],
         *,
         command_row: dict[str, object] | None = None,
+        operation_row: dict[str, object] | None = None,
+        event_rows: list[dict[str, object]] | None = None,
     ) -> None:
         self.ballot = ballot
         self.command_row = command_row
+        self.operation_row = operation_row
+        self.event_rows = event_rows or []
         self.calls: list[tuple[str, object | None]] = []
         self.transactions = 0
 
@@ -66,6 +85,14 @@ class FakeConnection:
             return FakeCursor({"ballot": self.ballot})
         if normalized.startswith("SELECT fingerprint, response FROM"):
             return FakeCursor(self.command_row)
+        if normalized.startswith("SELECT * FROM magi_operations"):
+            return FakeCursor(self.operation_row)
+        if normalized.startswith("SELECT 1 FROM magi_operations"):
+            return FakeCursor({"exists": 1} if self.operation_row is not None else None)
+        if normalized.startswith("SELECT 1 FROM magi_api_command_results"):
+            return FakeCursor({"exists": 1} if self.command_row is not None else None)
+        if normalized.startswith("SELECT operation_id, sequence, event_type"):
+            return FakeCursor(rows=self.event_rows)
         return FakeCursor()
 
     def transaction(self) -> AsyncContext:
@@ -123,6 +150,54 @@ def command_view() -> DecisionView:
             "phase": "waiting_for_user",
         }
     )
+
+
+OPERATION_ID = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+OPERATION_TIME = datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc)
+
+
+def operation_row(*, fingerprint: str = "f" * 64) -> dict[str, object]:
+    case = make_case()
+    return {
+        "operation_id": OPERATION_ID,
+        "fingerprint": fingerprint,
+        "kind": OperationKind.RUN_DECISION.value,
+        "status": OperationStatus.ACCEPTED.value,
+        "stage": OperationStage.QUEUED.value,
+        "decision_id": case.decision_id,
+        "decision_version": case.version,
+        "created_at": OPERATION_TIME,
+        "updated_at": OPERATION_TIME,
+        "completed_at": None,
+        "last_event_sequence": 1,
+        "failure_code": None,
+    }
+
+
+def operation_event(sequence: int) -> dict[str, object]:
+    return {
+        "operation_id": OPERATION_ID,
+        "sequence": sequence,
+        "event_type": (
+            OperationEventType.ACCEPTED.value
+            if sequence == 1
+            else OperationEventType.STAGE_CHANGED.value
+        ),
+        "status": (
+            OperationStatus.ACCEPTED.value
+            if sequence == 1
+            else OperationStatus.RUNNING.value
+        ),
+        "stage": (
+            OperationStage.QUEUED.value
+            if sequence == 1
+            else OperationStage.FIRST_BALLOT.value
+        ),
+        "message_code": (
+            "operation_accepted" if sequence == 1 else "first_ballot_started"
+        ),
+        "occurred_at": OPERATION_TIME,
+    }
 
 
 class PostgresInvocationLedgerTests(unittest.IsolatedAsyncioTestCase):
@@ -305,6 +380,23 @@ class PostgresCommandIdempotencyTests(unittest.IsolatedAsyncioTestCase):
                 operation=operation,
             )
 
+    async def test_sync_command_conflicts_with_existing_async_operation(self) -> None:
+        connection = FakeConnection({}, operation_row=operation_row())
+        store = PostgresCommandIdempotencyStore(
+            FakePool(connection)  # type: ignore[arg-type]
+        )
+
+        async def operation() -> DecisionView:
+            raise AssertionError("cross-mode conflict must not execute")
+
+        with self.assertRaises(CommandIdempotencyConflict):
+            await store.execute(
+                principal="user-1",
+                idempotency_key="operation-key",
+                fingerprint="a" * 64,
+                operation=operation,
+            )
+
     async def test_setup_creates_command_schema_in_one_transaction(self) -> None:
         connection = FakeConnection({})
         store = PostgresCommandIdempotencyStore(
@@ -315,6 +407,166 @@ class PostgresCommandIdempotencyTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(connection.transactions, 1)
         self.assertGreaterEqual(len(connection.calls), 2)
+
+
+class PostgresOperationStoreTests(unittest.IsolatedAsyncioTestCase):
+    async def test_accept_inserts_receipt_and_first_event_atomically(self) -> None:
+        connection = FakeConnection({})
+        store = PostgresOperationStore(FakePool(connection))  # type: ignore[arg-type]
+        case = make_case()
+
+        receipt = await store.accept(
+            principal="private-user@example.test",
+            idempotency_key="private-operation-key",
+            fingerprint="a" * 64,
+            kind=OperationKind.CREATE_DECISION,
+            decision_id=case.decision_id,
+            decision_version=case.version,
+            classification=DataClassification.SENSITIVE,
+            request_payload={"raw_question": "Should this be created?"},
+            accepted_at=OPERATION_TIME,
+        )
+
+        self.assertEqual(receipt.status, OperationStatus.ACCEPTED)
+        self.assertEqual(receipt.stage, OperationStage.QUEUED)
+        self.assertEqual(receipt.last_event_sequence, 1)
+        self.assertEqual(connection.transactions, 1)
+        queries = tuple(query for query, _ in connection.calls)
+        self.assertTrue(any("INSERT INTO magi_operations" in query for query in queries))
+        self.assertTrue(
+            any("INSERT INTO magi_operation_events" in query for query in queries)
+        )
+        self.assertTrue(any("pg_advisory_unlock" in query for query in queries))
+        parameters = repr(tuple(params for _, params in connection.calls))
+        self.assertNotIn("private-user@example.test", parameters)
+        self.assertNotIn("private-operation-key", parameters)
+        insert_params = next(
+            params
+            for query, params in connection.calls
+            if "INSERT INTO magi_operations" in query
+        )
+        assert isinstance(insert_params, tuple)
+        self.assertEqual(
+            insert_params[9].obj["raw_question"],  # type: ignore[union-attr]
+            "Should this be created?",
+        )
+
+    async def test_accept_replays_existing_receipt_and_rejects_conflict(self) -> None:
+        existing = operation_row(fingerprint="b" * 64)
+        connection = FakeConnection({}, operation_row=existing)
+        store = PostgresOperationStore(FakePool(connection))  # type: ignore[arg-type]
+        case = make_case()
+        common = {
+            "principal": "user-1",
+            "idempotency_key": "operation-0001",
+            "kind": OperationKind.RUN_DECISION,
+            "decision_id": case.decision_id,
+            "decision_version": case.version,
+            "classification": DataClassification.INTERNAL,
+            "request_payload": {"version": case.version},
+            "accepted_at": OPERATION_TIME,
+        }
+
+        replayed = await store.accept(fingerprint="b" * 64, **common)
+        self.assertEqual(replayed.operation_id, OPERATION_ID)
+        self.assertFalse(any("INSERT INTO" in query for query, _ in connection.calls))
+
+        with self.assertRaises(OperationIdempotencyConflict):
+            await store.accept(fingerprint="c" * 64, **common)
+
+    async def test_accept_conflicts_with_existing_synchronous_command(self) -> None:
+        connection = FakeConnection(
+            {},
+            command_row={"fingerprint": "d" * 64, "response": {}},
+        )
+        store = PostgresOperationStore(FakePool(connection))  # type: ignore[arg-type]
+        case = make_case()
+
+        with self.assertRaises(OperationIdempotencyConflict):
+            await store.accept(
+                principal="user-1",
+                idempotency_key="shared-command-key",
+                fingerprint="e" * 64,
+                kind=OperationKind.RUN_DECISION,
+                decision_id=case.decision_id,
+                decision_version=case.version,
+                classification=DataClassification.INTERNAL,
+                request_payload={"version": 1},
+                accepted_at=OPERATION_TIME,
+            )
+
+    async def test_get_masks_non_owner_and_validates_receipt(self) -> None:
+        owned_connection = FakeConnection({}, operation_row=operation_row())
+        store = PostgresOperationStore(
+            FakePool(owned_connection)  # type: ignore[arg-type]
+        )
+
+        owned = await store.get(principal="user-1", operation_id=OPERATION_ID)
+        self.assertIsNotNone(owned)
+        parameters = repr(tuple(params for _, params in owned_connection.calls))
+        self.assertNotIn("user-1", parameters)
+
+        missing = await PostgresOperationStore(
+            FakePool(FakeConnection({}))  # type: ignore[arg-type]
+        ).get(principal="user-2", operation_id=OPERATION_ID)
+        self.assertIsNone(missing)
+
+        invalid_result = operation_row()
+        invalid_result.update(
+            {
+                "status": OperationStatus.SUCCEEDED.value,
+                "stage": OperationStage.COMPLETE.value,
+                "completed_at": OPERATION_TIME,
+                "result": {"not": "a decision view"},
+            }
+        )
+        invalid_store = PostgresOperationStore(
+            FakePool(  # type: ignore[arg-type]
+                FakeConnection({}, operation_row=invalid_result)
+            )
+        )
+        with self.assertRaisesRegex(ProtocolViolation, "persisted operation"):
+            await invalid_store.get(
+                principal="user-1",
+                operation_id=OPERATION_ID,
+            )
+
+    async def test_events_are_cursor_ordered_bounded_and_owner_scoped(self) -> None:
+        connection = FakeConnection(
+            {},
+            operation_row=operation_row(),
+            event_rows=[operation_event(2), operation_event(3), operation_event(4)],
+        )
+        store = PostgresOperationStore(FakePool(connection))  # type: ignore[arg-type]
+
+        page = await store.events(
+            principal="user-1",
+            operation_id=OPERATION_ID,
+            after_sequence=1,
+            limit=2,
+        )
+
+        self.assertIsNotNone(page)
+        assert page is not None
+        self.assertEqual(tuple(item.sequence for item in page.events), (2, 3))
+        self.assertEqual(page.next_after_sequence, 3)
+        self.assertTrue(page.has_more)
+
+        with self.assertRaisesRegex(ValueError, "between 1 and 100"):
+            await store.events(
+                principal="user-1",
+                operation_id=OPERATION_ID,
+                limit=101,
+            )
+
+    async def test_setup_creates_operation_schema_in_one_transaction(self) -> None:
+        connection = FakeConnection({})
+        store = PostgresOperationStore(FakePool(connection))  # type: ignore[arg-type]
+
+        await store.setup()
+
+        self.assertEqual(connection.transactions, 1)
+        self.assertEqual(len(connection.calls), 4)
 
 
 if __name__ == "__main__":

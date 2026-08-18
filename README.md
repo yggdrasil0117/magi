@@ -99,3 +99,5 @@ real `DecisionView` workspace without fabricating an inbox. UI-D4b-1 adds guarde
 idempotent confirm/cancel commands; create and run remain separately gated.
 The proposed durable create/run receipt, worker, and event-replay contract is
 documented in docs/ui-d4b2-async-operations.md.
+UI-D4b-2b implements its durable PostgreSQL operation receipts and public event
+pages; the worker and async HTTP resources remain subsequent increments.
