@@ -1,6 +1,16 @@
 """Use cases and client-safe projections for MAGI interfaces."""
 
 from .models import DecisionView, DecisionViewProjector
+from .operations import (
+    OperationEvent,
+    OperationEventPage,
+    OperationEventType,
+    OperationKind,
+    OperationReceipt,
+    OperationStage,
+    OperationStatus,
+    validate_operation_transition,
+)
 from .reporting import (
     DecisionReport,
     DecisionReportMarkdownRenderer,
@@ -38,6 +48,14 @@ __all__ = [
     "DecisionReportProjector",
     "DecisionView",
     "DecisionViewProjector",
+    "OperationEvent",
+    "OperationEventPage",
+    "OperationEventType",
+    "OperationKind",
+    "OperationReceipt",
+    "OperationStage",
+    "OperationStatus",
+    "validate_operation_transition",
     "DecisionWorkflowConflict",
     "DecisionWorkflowNotFound",
     "InMemoryCommandIdempotencyStore",

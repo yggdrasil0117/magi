@@ -97,3 +97,5 @@ UI-D4 production increments and current API gaps are documented in
 docs/ui-d4-implementation-plan.md. UI-D4a upgrades the loopback Web client to a
 real `DecisionView` workspace without fabricating an inbox. UI-D4b-1 adds guarded,
 idempotent confirm/cancel commands; create and run remain separately gated.
+The proposed durable create/run receipt, worker, and event-replay contract is
+documented in docs/ui-d4b2-async-operations.md.
