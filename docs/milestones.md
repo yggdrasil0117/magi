@@ -93,7 +93,7 @@ and every second-round ballot requires an audit reason whether retained or revis
 
 ## UI/UX delivery track
 
-Status: planned as a cross-cutting track for M4 and M5.
+Status: UI-D1 proposed and pending confirmation.
 
 - UI-D1: define user journeys, information architecture, and every workflow state.
 - UI-D2: confirm low-fidelity Web and terminal wireframes before visual styling.

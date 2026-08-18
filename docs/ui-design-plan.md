@@ -1,6 +1,6 @@
 # MAGI UI/UX delivery plan
 
-Status: planned for staged confirmation across M4 and M5
+Status: UI-D1 proposed and pending confirmation
 
 ## Product objective
 
@@ -93,6 +93,8 @@ documented exit codes. CLI automation must not depend on visual wording.
 Deliver user flows, the state matrix, screen inventory, and permission boundaries.
 Confirm scope and navigation before drawing detailed screens.
 
+Proposal: `docs/ui-d1-information-architecture.md`.
+
 ### UI-D2: low-fidelity interaction design
 
 Deliver Web wireframes and terminal wireframes for create, confirm, run, report,
@@ -118,6 +120,7 @@ semantic parity from versioned fixtures.
 
 ## Immediate next design decision
 
-Before M4 evidence UI implementation begins, produce and confirm UI-D1. The current
-M3 report viewer is a visual reference only: its dark technical direction may be
-retained, softened, or replaced after the information architecture is approved.
+Confirm the five decisions at the end of the UI-D1 proposal before producing UI-D2
+wireframes. The current M3 report viewer is a visual reference only: its dark
+technical direction may be retained, softened, or replaced after the information
+architecture is approved.
