@@ -1,0 +1,6 @@
+interface:
+  display_name: "Casper Strategy"
+  short_description: "Assess strategy, alternatives, and long-term effects"
+  default_prompt: "Use $casper-strategy to evaluate strategic options and long-term effects."
+policy:
+  allow_implicit_invocation: false

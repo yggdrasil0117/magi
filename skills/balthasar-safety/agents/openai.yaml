@@ -1,0 +1,6 @@
+interface:
+  display_name: "Balthasar Safety"
+  short_description: "Assess human impact, safety, privacy, and reversibility"
+  default_prompt: "Use $balthasar-safety to evaluate human impact and safety risks."
+policy:
+  allow_implicit_invocation: false

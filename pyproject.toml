@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "magi-decision-system"
+version = "0.2.0a1"
+description = "Three-perspective decision support with deterministic arbitration"
+requires-python = ">=3.12"
+dependencies = [
+  "langchain>=1.3,<2",
+  "langchain-openai>=1.5,<2",
+  "langgraph>=1.1,<2",
+  "pydantic>=2,<3",
+  "python-dotenv>=1.2,<2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/magi"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100

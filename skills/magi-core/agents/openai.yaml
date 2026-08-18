@@ -1,0 +1,6 @@
+interface:
+  display_name: "MAGI Core Protocol"
+  short_description: "Enforce shared MAGI decision and ballot rules"
+  default_prompt: "Use $magi-core to structure and validate a MAGI decision."
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: magi
+      POSTGRES_USER: magi
+      POSTGRES_PASSWORD: ${MAGI_DB_PASSWORD:?Set MAGI_DB_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - magi-postgres:/var/lib/postgresql/data
+
+volumes:
+  magi-postgres:
