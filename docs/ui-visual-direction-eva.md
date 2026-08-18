@@ -9,9 +9,10 @@ MAGI-computer displays associated with *Evangelion*. This is more specific than 
 generic dark or cyberpunk theme: it uses an operational-control visual language,
 high information hierarchy, severe geometry, and context-sensitive alarm states.
 
-The result remains an original MAGI product interface. It does not reproduce
-NERV logos, character art, screenshots, exact title cards, copyrighted typefaces,
-or quoted slogans from the series.
+The result remains a MAGI product interface. It may provide controlled placements
+for licensed NERV marks, character art, screenshots, slogans, or other supplied
+materials. No official asset is bundled until its exact file and intended use pass
+the provenance and permission gate in `docs/ui-asset-governance.md`.
 
 Primary reference sources are the
 [official Evangelion portal](https://www.evangelion.jp/) and its
@@ -123,17 +124,19 @@ arbiter are displayed as process roles, never as a fourth personality.
 - Preserve complete no-color output and remove external terminal controls.
 - The three perspective modules must remain understandable below 80 columns.
 
-## Originality boundary
+## Asset and originality boundary
 
 Allowed inspiration includes operational density, amber/red-on-dark contrast,
 non-rectangular framing, technical indexing, warning hierarchy, and three-system
-composition. The implementation uses original icons, names, copy, frame geometry,
-and assets created for this repository.
+composition. Unlicensed builds use original icons, copy, geometry, and repository
+assets. Licensed builds may replace declared slots with approved official material.
 
-Do not use official logos, character silhouettes, screenshots, copied interface
-panels, exact slogans, or assets extracted from films, sites, games, or merchandise.
-If public distribution or commercial use is planned, perform a dedicated trademark
-and visual-similarity review before release.
+User approval of a design direction is not evidence of copyright or trademark
+permission. Downloading an official file does not grant redistribution rights.
+Unverified material remains a labelled placeholder and is excluded from release
+artifacts. Public or commercial distribution also requires a trademark and
+visual-similarity review; the interface must not imply official endorsement unless
+that representation is explicitly licensed.
 
 ## UI-D2 and UI-D3 deliverables
 

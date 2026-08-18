@@ -1,6 +1,6 @@
 # UI-D1: User journeys and information architecture
 
-Status: proposed; visual-direction decision confirmed, structural decisions pending
+Status: accepted; structural decisions 1–5 confirmed
 
 ## Scope and decisions
 
@@ -218,14 +218,14 @@ production behavior.
 - Authorization and missing backend contracts are visible in the design.
 - UI does not calculate status, votes, permissions, or legal transitions.
 
-## Decisions requested for confirmation
+## Confirmed decisions
 
 1. Adopt the decision inbox plus one versioned workspace as the primary structure.
 2. Adopt five workspace sections: Overview, Evidence, Perspectives, Report, Audit.
 3. Keep confirmation and explicit run as separate screens/actions.
 4. Show released first-round ballots during cross-review only as clearly preliminary.
-5. Confirmed by product direction: use an original EVA/MAGI-inspired command
-   interface under the constraints in `docs/ui-visual-direction-eva.md`.
+5. Use the EVA/MAGI-inspired command interface under the constraints in
+   `docs/ui-visual-direction-eva.md` and `docs/ui-asset-governance.md`.
 
-Once decisions 1–4 are confirmed, UI-D1 becomes accepted and UI-D2 can produce Web
-and terminal wireframes without revisiting navigation scope or visual intent.
+UI-D1 is accepted. UI-D2 may refine layout and interaction, but changing these
+five decisions requires an explicit information-architecture revision.

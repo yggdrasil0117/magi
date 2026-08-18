@@ -1,5 +1,12 @@
 # Web report viewer
 
+## UI-D2 design fixture
+
+`wireframes/ui-d2.html` is a dependency-free, browser-viewable proposal for the
+future full decision workspace. Open the file directly in a browser. Its data is
+synthetic, official-material regions are placeholders, and it is deliberately not
+served by the production report proxy.
+
 M3c provides a dependency-free report viewer that consumes the same authenticated
 JSON report as the terminal client. It uses DOM `textContent` for external prose,
 keeps the bearer token only in page memory, and never calculates a vote or status.

@@ -1,6 +1,6 @@
 # MAGI UI/UX delivery plan
 
-Status: UI-D1 structure pending confirmation; EVA-inspired visual direction required
+Status: UI-D1 accepted; UI-D2 wireframes proposed for confirmation
 
 ## Product objective
 
@@ -106,6 +106,9 @@ Deliver Web wireframes and terminal wireframes for create, confirm, run, report,
 evidence, history, and all failure states. Confirm field priority and actions before
 choosing final visual styling.
 
+Proposal: `docs/ui-d2-wireframes.md`. A browser-viewable fixture lives under
+`apps/web/wireframes/`; it is a design artifact, not a production client.
+
 ### UI-D3: visual foundation and component contract
 
 Deliver color and typography tokens, spacing, component anatomy, responsive rules,
@@ -125,7 +128,5 @@ semantic parity from versioned fixtures.
 
 ## Immediate next design decision
 
-Confirm structural decisions 1–4 at the end of the UI-D1 proposal before producing
-UI-D2 wireframes. The visual intent is already constrained to the original
-EVA/MAGI-inspired direction; UI-D2 will translate it into layout without freezing
-final components or styling.
+Confirm the UI-D2 screen hierarchy, action placement, responsive collapse, and
+official-asset gate before UI-D3 freezes visual tokens and component anatomy.

@@ -93,7 +93,7 @@ and every second-round ballot requires an audit reason whether retained or revis
 
 ## UI/UX delivery track
 
-Status: EVA-inspired visual direction required; UI-D1 structure pending confirmation.
+Status: UI-D1 accepted; UI-D2 Web/TUI wireframes proposed for confirmation.
 
 - UI-D1: define user journeys, information architecture, and every workflow state.
 - UI-D2: confirm low-fidelity Web and terminal wireframes before visual styling.

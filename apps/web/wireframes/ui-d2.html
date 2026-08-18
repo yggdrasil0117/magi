@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MAGI UI-D2 Wireframe</title>
+  <link rel="stylesheet" href="ui-d2.css">
+</head>
+<body>
+  <a class="skip-link" href="#workspace">跳到主要内容</a>
+  <header class="command-header">
+    <div class="licensed-slot mark-slot" aria-label="授权素材占位">
+      <span>OPTIONAL</span><strong>LICENSED MARK</strong>
+    </div>
+    <div class="system-title">
+      <span class="eyebrow">DECISION SUPPORT / PROTOCOL 1.0</span>
+      <strong>MAGI SYSTEM</strong>
+    </div>
+    <div class="system-readout">
+      <span><i class="status-dot"></i> LINK ONLINE</span>
+      <span id="clock">SYNC 14:32:08</span>
+    </div>
+  </header>
+
+  <div class="app-shell">
+    <nav class="decision-rail" aria-label="决策导航">
+      <div class="rail-heading"><span>01</span> DECISION INDEX</div>
+      <button class="new-decision" type="button">＋ 新建决策</button>
+      <label class="search-label" for="decision-search">FILTER</label>
+      <input id="decision-search" type="search" placeholder="搜索标题或 ID">
+      <div class="decision-list">
+        <button class="decision-item active" type="button">
+          <span class="item-code">DEC-017 / V03</span>
+          <strong>是否迁移核心工作流</strong>
+          <span class="item-state">需要操作 · 待确认</span>
+        </button>
+        <button class="decision-item" type="button">
+          <span class="item-code">DEC-012 / V01</span>
+          <strong>供应商备选方案</strong>
+          <span class="item-state complete">已完成 · 2:1</span>
+        </button>
+        <button class="decision-item" type="button">
+          <span class="item-code">DEC-009 / V02</span>
+          <strong>数据保留策略</strong>
+          <span class="item-state muted">信息不足</span>
+        </button>
+      </div>
+      <div class="rail-foot">3 AUTHORIZED / 1 ACTION</div>
+    </nav>
+
+    <main id="workspace" class="workspace" tabindex="-1">
+      <section class="decision-locator" aria-labelledby="decision-title">
+        <div>
+          <span class="eyebrow">ACTIVE DECISION / DEC-017 / VERSION 03</span>
+          <h1 id="decision-title">是否迁移核心工作流</h1>
+        </div>
+        <dl class="locator-meta">
+          <div><dt>RISK</dt><dd>HIGH</dd></div>
+          <div><dt>CLASS</dt><dd>INTERNAL</dd></div>
+          <div><dt>OWNER</dt><dd>USER-021</dd></div>
+        </dl>
+      </section>
+
+      <nav class="section-tabs" aria-label="工作区分区">
+        <button type="button" class="active">01 概览</button>
+        <button type="button">02 证据</button>
+        <button type="button">03 三方观点</button>
+        <button type="button">04 报告</button>
+        <button type="button">05 审计</button>
+      </nav>
+
+      <div class="scenario-switcher" role="group" aria-label="线框场景">
+        <span>WIREFRAME SCENARIO</span>
+        <button type="button" data-screen="inbox">收件箱</button>
+        <button type="button" data-screen="confirm" class="active">确认</button>
+        <button type="button" data-screen="run">运行门</button>
+        <button type="button" data-screen="review">交叉复核</button>
+        <button type="button" data-screen="report">最终报告</button>
+        <button type="button" data-screen="recovery">恢复</button>
+      </div>
+
+      <section class="screen" data-panel="inbox" hidden>
+        <div class="state-module nominal">
+          <span class="state-code">STATE / INDEX_READY</span>
+          <h2>决策收件箱</h2>
+          <p>优先显示需要你操作的决策。列表权限与状态来自服务端。</p>
+        </div>
+        <div class="content-grid">
+          <article class="panel wide-panel">
+            <div class="panel-heading"><span>AUTHORIZED RECORDS</span><b>03</b></div>
+            <div class="inbox-row"><span class="priority">ACTION</span><strong>是否迁移核心工作流</strong><span>待确认</span><code>DEC-017 / V03</code></div>
+            <div class="inbox-row"><span>DONE</span><strong>供应商备选方案</strong><span>已完成</span><code>DEC-012 / V01</code></div>
+            <div class="inbox-row"><span>GAP</span><strong>数据保留策略</strong><span>信息不足</span><code>DEC-009 / V02</code></div>
+          </article>
+        </div>
+        <div class="action-gate"><div><span>ACTION GATE</span><p>新建会创建草案，不会启动三方评估。</p></div><button type="button">新建决策</button></div>
+      </section>
+
+      <section class="screen" data-panel="confirm">
+        <div class="state-module caution">
+          <span class="state-code">STATE / WAITING_FOR_USER</span>
+          <h2>等待确认与冻结</h2>
+          <p>协调器已规范化输入。请核对变化、未知项和证据边界。</p>
+        </div>
+        <div class="content-grid compare-grid">
+          <article class="panel">
+            <div class="panel-heading"><span>RAW / 01</span><b>原始问题</b></div>
+            <p>我们是否应该在本季度把核心工作流迁移到新平台？</p>
+            <ul><li>方案 A：本季度完成迁移</li><li>方案 B：试点后再决定</li><li>方案 C：保持现状</li></ul>
+          </article>
+          <article class="panel focus-panel">
+            <div class="panel-heading"><span>NORMALIZED / 02</span><b>规范化问题</b></div>
+            <p>在不中断关键服务且满足回滚约束的前提下，应选择哪一种迁移路径？</p>
+            <div class="diff-note">＋ 增加“不中断关键服务”约束</div>
+            <div class="diff-note">＋ 明确三种可仲裁选项</div>
+          </article>
+          <article class="panel wide-panel">
+            <div class="panel-heading"><span>BOUNDARY / 03</span><b>冻结前检查</b></div>
+            <div class="fact-grid">
+              <div><small>未知项</small><strong>峰值容量实测结果</strong></div>
+              <div><small>证据</small><strong>4 条公开 / 1 条受限已排除</strong></div>
+              <div><small>硬约束</small><strong>30 分钟内可回滚</strong></div>
+            </div>
+          </article>
+        </div>
+        <div class="action-gate">
+          <div><span>ACTION GATE / CONFIRM</span><p>确认后，本版本的问题、选项、约束和证据边界不可修改；仍不会自动运行。</p></div>
+          <div class="action-buttons"><button class="secondary" type="button">返回编辑</button><button type="button">确认并冻结</button></div>
+        </div>
+      </section>
+
+      <section class="screen" data-panel="run" hidden>
+        <div class="state-module armed">
+          <span class="state-code">STATE / EVIDENCE_READY</span>
+          <h2>评估尚未启动</h2>
+          <p>决策版本已经冻结。启动后，三个视角将独立形成第一轮意见。</p>
+        </div>
+        <div class="perspective-strip">
+          <article><span>M-01</span><strong>MELCHIOR</strong><em>SEALED / READY</em></article>
+          <article><span>B-02</span><strong>BALTHASAR</strong><em>SEALED / READY</em></article>
+          <article><span>C-03</span><strong>CASPER</strong><em>SEALED / READY</em></article>
+        </div>
+        <article class="panel">
+          <div class="panel-heading"><span>RUN DISCLOSURE</span><b>启动影响</b></div>
+          <ul class="check-list"><li>将触发三个隔离的模型调用</li><li>第一轮进行时不显示任何部分票</li><li>高风险决策会强制进行一次有界交叉复核</li><li>最终结果由确定性仲裁规则生成</li></ul>
+        </article>
+        <div class="action-gate"><div><span>ACTION GATE / RUN</span><p>此操作开始计算。离开页面不会取消，重新连接后以服务端状态为准。</p></div><button type="button">启动三方评估</button></div>
+      </section>
+
+      <section class="screen" data-panel="review" hidden>
+        <div class="state-module processing">
+          <span class="state-code">STATE / CROSS_REVIEW</span>
+          <h2>有界交叉复核进行中</h2>
+          <p>以下仅为已经释放的第一轮意见，不代表最终投票。</p>
+        </div>
+        <div class="perspective-grid">
+          <article><span>M-01 / PRELIMINARY</span><strong>MELCHIOR</strong><b>倾向：方案 B</b><p>需要以小范围试点验证容量与回滚时间。</p><em>REVIEWING</em></article>
+          <article><span>B-02 / PRELIMINARY</span><strong>BALTHASAR</strong><b>倾向：方案 B</b><p>分阶段迁移降低人员与服务连续性风险。</p><em>REVIEWING</em></article>
+          <article><span>C-03 / PRELIMINARY</span><strong>CASPER</strong><b>倾向：方案 A</b><p>本季度窗口具有战略价值，但依赖回滚证明。</p><em>REVIEWING</em></article>
+        </div>
+        <div class="sealed-review"><span>SECOND ROUND</span><strong>REVIEW BALLOTS SEALED</strong><p>不显示部分复核票，也不展示模型私有推理。</p></div>
+      </section>
+
+      <section class="screen" data-panel="report" hidden>
+        <div class="state-module complete-state">
+          <span class="state-code">STATE / COMPLETED / MAJORITY</span>
+          <h2>建议采用方案 B</h2>
+          <p>先进行受控试点，通过门槛后再决定全面迁移。</p>
+          <div class="vote-count">02 <small>同意</small><i>:</i> 01 <small>异议</small></div>
+        </div>
+        <div class="content-grid report-grid">
+          <article class="panel">
+            <div class="panel-heading"><span>MAJORITY / 01</span><b>多数意见</b></div>
+            <p>方案 B 在验证关键未知项的同时保留回滚能力，满足高风险决策的可逆性要求。</p>
+          </article>
+          <article class="panel dissent-panel">
+            <div class="panel-heading"><span>DISSENT / 02</span><b>保留异议</b></div>
+            <p>CASPER 认为迁移窗口的战略价值可能因试点延迟而降低，建议为试点设置严格截止日期。</p>
+          </article>
+          <article class="panel wide-panel">
+            <div class="panel-heading"><span>CONDITIONS / 03</span><b>条件与下一步</b></div>
+            <div class="fact-grid"><div><small>必须验证</small><strong>峰值容量、30 分钟回滚</strong></div><div><small>下一步</small><strong>建立 10% 流量试点</strong></div><div><small>证据引用</small><strong>E-01 · E-03 · E-04</strong></div></div>
+          </article>
+        </div>
+        <div class="action-gate"><div><span>REPORT ACTIONS</span><p>导出包含多数意见、异议和复核审计，不生成不同版本的结论。</p></div><div class="action-buttons"><button class="secondary" type="button">查看证据</button><button type="button">导出报告</button></div></div>
+      </section>
+
+      <section class="screen" data-panel="recovery" hidden>
+        <div class="state-module alert-state">
+          <span class="state-code">STATE / DEGRADED</span>
+          <h2>无法形成正式结论</h2>
+          <p>CASPER 在限定重试后仍不可用。两方意见仅供参考，不计为正式多数。</p>
+        </div>
+        <div class="content-grid">
+          <article class="panel"><div class="panel-heading"><span>TRUST BOUNDARY</span><b>最后可信阶段</b></div><p>决策已冻结；MELCHIOR 与 BALTHASAR 的第一轮票已安全保存，未执行仲裁。</p></article>
+          <article class="panel"><div class="panel-heading"><span>RECOVERY</span><b>可用操作</b></div><p>查看审计以确认失败类型。当前策略不允许把两票升级为正式结果。</p></article>
+        </div>
+        <div class="action-gate danger-gate"><div><span>SAFE RECOVERY</span><p>创建新版本会保留当前版本及其审计记录。</p></div><div class="action-buttons"><button class="secondary" type="button">查看审计</button><button type="button">创建新版本</button></div></div>
+      </section>
+    </main>
+
+    <aside class="diagnostic-rail" aria-label="系统诊断">
+      <div class="rail-heading"><span>03</span> MAGI DIAGNOSTIC</div>
+      <div class="triad" aria-label="三个视角状态">
+        <div><span>M-01</span><strong>MELCHIOR</strong><em>STANDBY</em></div>
+        <div><span>B-02</span><strong>BALTHASAR</strong><em>STANDBY</em></div>
+        <div><span>C-03</span><strong>CASPER</strong><em>STANDBY</em></div>
+      </div>
+      <dl class="protocol-data">
+        <div><dt>ROUND</dt><dd>00 / 02</dd></div><div><dt>DISCLOSURE</dt><dd>SEALED</dd></div><div><dt>ARBITER</dt><dd>DETERMINISTIC</dd></div><div><dt>CHECKPOINT</dt><dd>READY</dd></div>
+      </dl>
+      <div class="licensed-slot context-slot"><span>OPTIONAL LICENSED</span><strong>CONTEXT ART / FRAME</strong><small>隐藏后不影响信息与操作</small></div>
+      <div class="asset-notice"><strong>ASSET GATE</strong><p>当前为中性占位。只有清单、文件哈希与许可范围全部匹配后才替换。</p></div>
+    </aside>
+  </div>
+
+  <footer class="protocol-footer"><span>DEC-017 / V03</span><span>LAST SYNC 2026-08-18 14:32:08 CST</span><span>API 0.3.0</span><span>WIREFRAME / NOT PRODUCTION</span></footer>
+  <script src="ui-d2.mjs" type="module"></script>
+</body>
+</html>

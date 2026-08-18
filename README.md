@@ -85,7 +85,9 @@ M3a reporting is documented in docs/m3a-decision-report.md.
 M3b report transport is documented in docs/m3b-report-api-export.md.
 M3 acceptance and client parity are documented in docs/m3c-client-parity-acceptance.md.
 The cross-cutting Web/TUI interface plan is documented in docs/ui-design-plan.md.
-The proposed UI-D1 journeys and information architecture are documented in
+The accepted UI-D1 journeys and information architecture are documented in
 docs/ui-d1-information-architecture.md.
-The required original EVA/MAGI-inspired visual direction is documented in
+The required EVA/MAGI-inspired visual direction is documented in
 docs/ui-visual-direction-eva.md.
+The UI-D2 Web/TUI wireframe proposal is documented in docs/ui-d2-wireframes.md;
+official-material slots and release gates are defined in docs/ui-asset-governance.md.
