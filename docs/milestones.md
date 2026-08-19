@@ -111,7 +111,7 @@ and Web/TUI render the same authoritative decision semantics.
 
 ## M4: Evidence and audit
 
-Status: M4a controlled retrieval implemented; durable audit and redaction pending.
+Status: M4a retrieval and M4b append-only audit implemented; audit UI/API pending.
 
 - Add read-only retrieval gateway.
 - Freeze and hash evidence.
@@ -126,6 +126,12 @@ M4a adds a fail-closed read-only HTTPS gateway, exact-host production allowlist,
 SSRF and response-size controls, content normalization and hashing, API source
 requests, and retry-stable snapshot freezing. It does not yet satisfy the M4 exit
 criterion because canonical append-only audit and redaction records remain.
+
+M4b adds canonical hash-chained decision state records, a PostgreSQL append-only
+table protected from updates and deletes, additive redaction overlays, automatic
+retry repair, and deterministic report reconstruction without checkpoint access.
+The data-layer exit criterion is satisfied; authenticated audit/redaction APIs and
+the planned provenance/audit UI states remain for M4c.
 
 ## M5: Clients and evaluation
 

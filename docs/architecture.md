@@ -79,6 +79,11 @@ Each receives the same DecisionCase and EvidenceSnapshot plus its own instructio
 
 Use LangGraph from M2 to run agents concurrently, checkpoint stages, pause for user confirmation, resume failures, reveal ballots only after the first round closes, and run one cross-review when required. The orchestrator cannot change votes. LangGraph checkpoints are operational state, not the canonical audit or arbitration record.
 
+M4b implements the canonical audit boundary as a per-decision-version hash chain.
+Application projections append validated decision states to it, and reports can be
+reconstructed from the verified chain without reading LangGraph. Redaction is an
+append-only visibility overlay and never rewrites canonical records.
+
 Decision thread identity belongs to the orchestration layer. Infrastructure may
 reuse it, but the application layer does not import PostgreSQL adapters.
 

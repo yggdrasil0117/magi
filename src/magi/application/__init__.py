@@ -40,6 +40,7 @@ from .reporting import (
 )
 from .service import (
     DecisionApplicationService,
+    DecisionAuditor,
     DecisionGraph,
     DecisionWorkflowConflict,
     DecisionWorkflowNotFound,
@@ -64,6 +65,7 @@ __all__ = [
     "DecisionCatalogEntry",
     "DecisionHistory",
     "DecisionApplicationService",
+    "DecisionAuditor",
     "CommandIdempotencyConflict",
     "CommandIdempotencyStore",
     "DecisionGraph",

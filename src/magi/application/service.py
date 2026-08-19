@@ -56,6 +56,12 @@ class DecisionGraph(Protocol):
     ) -> object: ...
 
 
+class DecisionAuditor(Protocol):
+    async def capture(
+        self, state: Mapping[str, Any], *, occurred_at: datetime
+    ) -> object: ...
+
+
 class DecisionApplicationService:
     """Single execution boundary consumed later by HTTP, terminal, and Web clients."""
 
@@ -65,12 +71,14 @@ class DecisionApplicationService:
         *,
         normalizer: DecisionNormalizer | None = None,
         evidence_gateway: EvidenceRetrievalGateway | None = None,
+        auditor: DecisionAuditor | None = None,
         projector: DecisionViewProjector | None = None,
         clock: Callable[[], datetime] = utc_now,
     ) -> None:
         self._graph = graph
         self._normalizer = normalizer
         self._evidence_gateway = evidence_gateway
+        self._auditor = auditor
         self._projector = projector or DecisionViewProjector()
         self._clock = clock
 
@@ -88,7 +96,7 @@ class DecisionApplicationService:
                 raise DecisionWorkflowConflict(
                     "the decision already has different preparation inputs"
                 )
-            return self._projector.project(saved_values)
+            return await self._project(saved_values)
         if request.evidence_sources and self._evidence_gateway is None:
             raise DecisionPreparationFailed(
                 "evidence retrieval gateway is not configured"
@@ -199,7 +207,7 @@ class DecisionApplicationService:
                 raise DecisionWorkflowConflict(
                     "the decision version already has different prepared inputs"
                 )
-            return self._projector.project(saved_values)
+            return await self._project(saved_values)
 
         initial_state = {
             "case": case.model_dump(mode="json"),
@@ -214,7 +222,7 @@ class DecisionApplicationService:
         if preparation_fingerprint is not None:
             initial_state["preparation_fingerprint"] = preparation_fingerprint
         state = await self._graph.ainvoke(initial_state, config=config)
-        view = self._projector.project(state)
+        view = await self._project(state)
         if not view.awaiting_confirmation:
             raise ProtocolViolation("workflow did not pause for user confirmation")
         return view
@@ -315,7 +323,7 @@ class DecisionApplicationService:
                 f"decision workflow {decision_id}:{version} was not found"
             )
         self._validate_saved_identity(values, decision_id, version)
-        return self._projector.project(values)
+        return await self._project(values)
 
     async def _load(
         self,
@@ -330,7 +338,7 @@ class DecisionApplicationService:
                 f"decision workflow {decision_id}:{version} was not found"
             )
         self._validate_saved_identity(values, decision_id, version)
-        return saved, values, self._projector.project(values)
+        return saved, values, await self._project(values)
 
     @staticmethod
     def _require_interrupt(saved: object, node_name: str) -> None:
@@ -353,7 +361,16 @@ class DecisionApplicationService:
             Command(resume=dict(payload)),
             config=self._config(decision_id, version),
         )
-        return self._projector.project(state)
+        return await self._project(state)
+
+    async def _project(self, state: Mapping[str, Any]) -> DecisionView:
+        values = dict(state)
+        if self._auditor is not None:
+            occurred_at = self._clock()
+            if occurred_at.tzinfo is None:
+                raise ProtocolViolation("decision audit clock must be timezone-aware")
+            await self._auditor.capture(values, occurred_at=occurred_at)
+        return self._projector.project(values)
 
     @staticmethod
     def _config(decision_id: UUID, version: int) -> dict[str, Any]:

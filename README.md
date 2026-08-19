@@ -46,6 +46,10 @@ exact-host allowlist that is empty by default, rejects private-network and peer
 address changes, bounds textual responses, and freezes normalized content with a
 server-calculated hash before confirmation.
 
+M4b advances to version 0.4.0a2 with a PostgreSQL-backed append-only audit chain,
+additive redaction overlays, integrity verification, retry repair, and final-report
+reconstruction that does not depend on LangGraph checkpoints.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -90,6 +94,7 @@ M3a reporting is documented in docs/m3a-decision-report.md.
 M3b report transport is documented in docs/m3b-report-api-export.md.
 M3 acceptance and client parity are documented in docs/m3c-client-parity-acceptance.md.
 Controlled evidence retrieval is documented in docs/m4a-controlled-evidence-retrieval.md.
+Append-only audit and report reconstruction are documented in docs/m4b-append-only-audit.md.
 The cross-cutting Web/TUI interface plan is documented in docs/ui-design-plan.md.
 The accepted UI-D1 journeys and information architecture are documented in
 docs/ui-d1-information-architecture.md.

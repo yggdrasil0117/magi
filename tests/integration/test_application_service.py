@@ -34,6 +34,7 @@ from magi.domain import (
     DecisionState,
     VerificationStatus,
 )
+from magi.audit import DecisionAuditService, InMemoryAuditLedger
 from magi.orchestration import build_langgraph_workflow
 from tests.fixtures.factories import make_ballot, make_case, make_snapshot
 
@@ -82,6 +83,8 @@ class DecisionApplicationServiceTests(unittest.IsolatedAsyncioTestCase):
     def build_service(
         self,
         saver: InMemorySaver | None = None,
+        *,
+        auditor: DecisionAuditService | None = None,
     ) -> tuple[DecisionApplicationService, ScriptedPerspectiveRunner, InMemorySaver]:
         case = make_case(confirmed=False)
         runner = ScriptedPerspectiveRunner(
@@ -89,7 +92,9 @@ class DecisionApplicationServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         selected_saver = saver or InMemorySaver()
         graph = build_langgraph_workflow(runner, checkpointer=selected_saver)
-        return DecisionApplicationService(graph), runner, selected_saver
+        return DecisionApplicationService(
+            graph, auditor=auditor
+        ), runner, selected_saver
 
     def build_preparation_service(
         self,
@@ -182,6 +187,28 @@ class DecisionApplicationServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(cancelled.terminal)
         self.assertEqual(cancelled.ballots, ())
         self.assertEqual(runner.calls, [])
+
+    async def test_completed_workflow_is_reconstructable_from_audit(self) -> None:
+        ledger = InMemoryAuditLedger()
+        auditor = DecisionAuditService(ledger)
+        case = make_case(confirmed=False)
+        service, _, _ = self.build_service(auditor=auditor)
+        await service.wait_for_confirmation(case, make_snapshot(case))
+        await service.confirm(
+            case.decision_id,
+            case.version,
+            confirmed_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+        )
+        completed = await service.run(case.decision_id, case.version)
+
+        reconstructed = await auditor.reconstruct_report(
+            case.decision_id, case.version
+        )
+        records = await ledger.records(case.decision_id, case.version)
+
+        self.assertEqual(reconstructed, completed.report)
+        self.assertEqual(len(records), 3)
+        self.assertEqual(tuple(record.sequence for record in records), (1, 2, 3))
 
     async def test_cancel_after_confirmation_stops_before_run(self) -> None:
         case = make_case(confirmed=False)

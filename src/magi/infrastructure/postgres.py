@@ -48,6 +48,8 @@ from magi.application import (
 from magi.domain import DataClassification, ProtocolViolation
 from magi.orchestration import decision_thread_id
 
+from .postgres_audit import PostgresAuditLedger
+
 
 INVOCATION_SCHEMA = (
     """
@@ -902,6 +904,7 @@ class PostgresPersistenceRuntime:
         self.invocation_ledger = PostgresInvocationLedger(self.pool)
         self.command_idempotency_store = PostgresCommandIdempotencyStore(self.pool)
         self.operation_store = PostgresOperationStore(self.pool)
+        self.audit_ledger = PostgresAuditLedger(self.pool)
         self._checkpointer: AsyncPostgresSaver | None = None
         self._opened = False
 
@@ -929,6 +932,7 @@ class PostgresPersistenceRuntime:
                 await self.invocation_ledger.setup()
                 await self.command_idempotency_store.setup()
                 await self.operation_store.setup()
+                await self.audit_ledger.setup()
                 await self._checkpointer.setup()
         except Exception:
             self._checkpointer = None

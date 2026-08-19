@@ -14,6 +14,7 @@ from magi.agents import (
     ScriptedPerspectiveRunner,
 )
 from magi.application import DecisionView, DecisionViewProjector, OperationKind
+from magi.audit import DecisionAuditService
 from magi.domain import (
     AgentName,
     ArbitrationResult,
@@ -175,6 +176,15 @@ class PostgresPersistenceIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 Command(resume={"start": True}),
                 config=config,
             )
+            await DecisionAuditService(third_runtime.audit_ledger).capture(
+                completed,
+                occurred_at=invocation_time,
+            )
+
+        async with PostgresPersistenceRuntime(POSTGRES_DSN) as fourth_runtime:
+            reconstructed_report = await DecisionAuditService(
+                fourth_runtime.audit_ledger
+            ).reconstruct_report(case.decision_id, case.version)
 
         result = ArbitrationResult.model_validate(completed["result"])
         self.assertEqual(stored_ballot, canonical_ballot)
@@ -188,6 +198,7 @@ class PostgresPersistenceIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(operation_events.events[0].message_code, "operation_accepted")
         self.assertEqual(result.status, ArbitrationStatus.CONSENSUS)
         self.assertEqual(result.winning_option, "release")
+        self.assertEqual(reconstructed_report.selected_option, "release")
 
 
 if __name__ == "__main__":

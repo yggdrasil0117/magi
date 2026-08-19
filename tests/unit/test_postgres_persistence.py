@@ -28,6 +28,7 @@ from magi.application import (
 )
 from magi.domain import AgentName, DataClassification, ProtocolViolation
 from magi.infrastructure import (
+    PostgresAuditLedger,
     PostgresCommandIdempotencyStore,
     PostgresInvocationLedger,
     PostgresOperationStore,
@@ -251,6 +252,36 @@ class PostgresInvocationLedgerTests(unittest.IsolatedAsyncioTestCase):
                 "postgresql://magi:example@127.0.0.1:5432/magi",
                 max_size=1,
             )
+
+
+class PostgresAuditLedgerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_setup_and_first_append_use_transactional_advisory_lock(self) -> None:
+        connection = FakeConnection({})
+        ledger = PostgresAuditLedger(
+            FakePool(connection)  # type: ignore[arg-type]
+        )
+
+        await ledger.setup()
+        record = await ledger.append(
+            decision_id=make_case().decision_id,
+            decision_version=1,
+            kind="decision_state",
+            classification=DataClassification.INTERNAL,
+            payload={"phase": "waiting_for_user"},
+            occurred_at=OPERATION_TIME,
+        )
+
+        queries = tuple(query for query, _ in connection.calls)
+        self.assertTrue(
+            any(
+                "CREATE TABLE IF NOT EXISTS magi_decision_audit" in query
+                for query in queries
+            )
+        )
+        self.assertTrue(any("pg_advisory_xact_lock" in query for query in queries))
+        self.assertTrue(any("INSERT INTO magi_decision_audit" in query for query in queries))
+        self.assertEqual(record.sequence, 1)
+        self.assertEqual(record.previous_hash, "0" * 64)
 
 
 class PostgresReadinessTests(unittest.IsolatedAsyncioTestCase):

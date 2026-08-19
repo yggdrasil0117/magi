@@ -8,11 +8,13 @@ from .postgres import (
     decision_thread_id,
 )
 from .http_evidence import EvidenceGatewayPolicy, HttpEvidenceGateway
+from .postgres_audit import PostgresAuditLedger
 
 __all__ = [
     "EvidenceGatewayPolicy",
     "HttpEvidenceGateway",
     "PostgresInvocationLedger",
+    "PostgresAuditLedger",
     "PostgresCommandIdempotencyStore",
     "PostgresPersistenceRuntime",
     "PostgresOperationStore",

@@ -56,6 +56,10 @@ Trusted only after validation:
 | Evidence URL reaches private infrastructure | Require exact-host allowlisting, HTTPS, public DNS and peer equality; forbid IP literals, credentials, redirects, proxies, and custom ports |
 | Evidence response exhausts resources | Bound timeout, connections, media types, charset, declared length, and streamed decoded bytes |
 | Retrieval failure leaks an upstream URL or response | Return a stable preparation error and retain details only in the exception chain |
+| Checkpoint mutation changes decision history | Store canonical decision states in a separate sequence- and hash-verified audit chain |
+| Audit row is overwritten or deleted | Expose append only in the adapter and reject PostgreSQL UPDATE/DELETE with a trigger |
+| Redaction destroys reproducibility | Append a targeted overlay event; retain canonical bytes for authorized reconstruction |
+| Checkpoint succeeds before audit append | Fail the command and idempotently repair the audit record on the next read or retry |
 | Create retry duplicates work or changes normalization | Reuse a deterministic principal-scoped decision ID and validate a checkpointed preparation fingerprint before Coordinator invocation |
 | Readiness leaks infrastructure detail | Return only ready/not-ready and suppress database exception text |
 | Dependency failure receives traffic | Require the application binding and a bounded PostgreSQL probe before reporting ready |

@@ -21,6 +21,7 @@ from magi.api import (
     create_production_app,
 )
 from magi.application import InMemoryCommandIdempotencyStore
+from magi.audit import InMemoryAuditLedger
 from tests.fixtures.factories import DECISION_ID
 
 
@@ -31,6 +32,7 @@ class FakeRuntime:
     def __init__(self) -> None:
         self.invocation_ledger = InMemoryInvocationLedger()
         self.command_idempotency_store = InMemoryCommandIdempotencyStore()
+        self.audit_ledger = InMemoryAuditLedger()
         self._checkpointer = object()
         self.open_calls: list[bool] = []
         self.closed = False

@@ -33,6 +33,7 @@ from magi.application import (
     OperationStore,
     OperationWorker,
 )
+from magi.audit import AuditLedger, DecisionAuditService
 from magi.domain import AgentName
 from magi.infrastructure import (
     EvidenceGatewayPolicy,
@@ -142,6 +143,7 @@ class ProductionPersistence(Protocol):
     invocation_ledger: InvocationLedger
     command_idempotency_store: CommandIdempotencyStore
     operation_store: OperationStore
+    audit_ledger: AuditLedger
 
     @property
     def checkpointer(self) -> Any: ...
@@ -275,6 +277,7 @@ def create_production_app(
                 graph,
                 normalizer=coordinator,
                 evidence_gateway=evidence_gateway,
+                auditor=DecisionAuditService(runtime.audit_ledger),
             )
             deferred_service.bind(application_service)
             if operation_store is not None:
