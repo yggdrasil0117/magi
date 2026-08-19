@@ -10,6 +10,8 @@ from magi.arbitration import DeterministicArbiter
 from magi.audit import (
     AuditChainViolation,
     AuditRedaction,
+    AuditRedactionConflict,
+    AuditTrailNotFound,
     DecisionAuditService,
     InMemoryAuditLedger,
 )
@@ -37,6 +39,13 @@ def completed_state() -> dict[str, object]:
 
 
 class DecisionAuditServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_trail_is_not_reported_as_verified_empty_history(self) -> None:
+        service = DecisionAuditService(InMemoryAuditLedger())
+        with self.assertRaises(AuditTrailNotFound):
+            await service.trail(
+                UUID("11111111-1111-4111-8111-111111111111"), 1
+            )
+
     async def test_capture_is_idempotent_and_builds_a_hash_chain(self) -> None:
         ledger = InMemoryAuditLedger()
         service = DecisionAuditService(ledger)
@@ -91,6 +100,9 @@ class DecisionAuditServiceTests(unittest.IsolatedAsyncioTestCase):
         visible = await service.visible_records(
             captured.decision_id, captured.decision_version
         )
+        trail = await service.trail(
+            captured.decision_id, captured.decision_version
+        )
         report = await service.reconstruct_report(
             captured.decision_id, captured.decision_version
         )
@@ -98,6 +110,8 @@ class DecisionAuditServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(redaction.kind, "redaction")
         self.assertEqual(visible[0]["payload"]["case"]["raw_question"], "[REDACTED]")
         self.assertEqual(visible[0]["redacted_fields"], ["/case/raw_question"])
+        self.assertEqual(trail.record_count, 2)
+        self.assertEqual(trail.records[0].redacted_fields, ("/case/raw_question",))
         canonical = await ledger.records(captured.decision_id, captured.decision_version)
         self.assertEqual(
             canonical[0].payload["case"]["raw_question"],
@@ -136,6 +150,33 @@ class DecisionAuditServiceTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(AuditChainViolation, "path"):
             await service.visible_records(
                 captured.decision_id, captured.decision_version
+            )
+
+    async def test_redaction_command_identity_cannot_be_reused_differently(self) -> None:
+        ledger = InMemoryAuditLedger()
+        service = DecisionAuditService(ledger)
+        captured = await service.capture(completed_state(), occurred_at=AUDIT_TIME)
+        command_id = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+        original = AuditRedaction(
+            target_record_id=captured.record_id,
+            field_paths=("/case/raw_question",),
+            reason="Privacy request.",
+            actor="privacy-officer",
+            command_id=command_id,
+        )
+        await service.redact(
+            captured.decision_id,
+            captured.decision_version,
+            original,
+            occurred_at=AUDIT_TIME + timedelta(seconds=1),
+        )
+
+        with self.assertRaises(AuditRedactionConflict):
+            await service.redact(
+                captured.decision_id,
+                captured.decision_version,
+                original.model_copy(update={"reason": "Changed request."}),
+                occurred_at=AUDIT_TIME + timedelta(seconds=2),
             )
 
 

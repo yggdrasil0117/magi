@@ -1,6 +1,13 @@
 import { renderReport, safeText } from "./report.mjs";
 import { commandPresentation, createCommandIntent, executeCommand } from "./commands.mjs";
 import {
+  createRedactionIntent,
+  fetchAuditTrail,
+  renderAuditTrail,
+  renderAuditUnavailable,
+  submitRedaction,
+} from "./audit.mjs";
+import {
   createAsyncIntent,
   fetchOperation,
   fetchOperationEvents,
@@ -24,6 +31,7 @@ let dialogAction = null;
 let pendingIntent = null;
 let operationController = null;
 let pendingCreateIntent = null;
+let pendingAuditIntent = null;
 
 export const STATE_PRESENTATION = Object.freeze({
   created: ["CREATED", "草案已创建", "决策仍在准备阶段。", "waiting"],
@@ -112,7 +120,10 @@ export function renderWorkspace(root, document) {
   root.append(renderState(view), renderCase(view), renderDisclosure(view), renderEvidence(view));
   const reportRoot = element("section", "authoritative-report");
   if (view.report) renderReport(reportRoot, view.report);
-  root.append(reportRoot, renderActions(view));
+  const auditRoot = element("section", "decision-audit");
+  auditRoot.id = "decision-audit";
+  renderAuditUnavailable(auditRoot, "需要 audit:read 权限以验证并读取规范审计链。");
+  root.append(reportRoot, auditRoot, renderActions(view));
   root.hidden = false;
   updateShell(view);
 }
@@ -266,6 +277,20 @@ async function loadDecision(decisionId, version, token, signal) {
   return payload;
 }
 
+async function syncAudit(root, view, token, signal) {
+  const auditRoot = root.querySelector("#decision-audit");
+  if (!auditRoot) return;
+  try {
+    const trail = await fetchAuditTrail(view.decisionId, view.version, token, signal);
+    renderAuditTrail(auditRoot, trail);
+  } catch (error) {
+    const message = error.status === 403
+      ? "当前凭据没有 audit:read 权限；决策内容仍可正常使用。"
+      : `审计链不可用：${safeText(error.message)}`;
+    renderAuditUnavailable(auditRoot, message);
+  }
+}
+
 function bind() {
   const form = document.querySelector("#access-form");
   if (!form) return;
@@ -284,7 +309,9 @@ function bind() {
       const payload = await loadDecision(form.elements.decision_id.value.trim(), form.elements.version.value, form.elements.token.value, controller.signal);
       currentToken = form.elements.token.value;
       pendingIntent = null;
+      pendingAuditIntent = null;
       renderWorkspace(root, payload);
+      await syncAudit(root, currentView, currentToken, controller.signal);
       status.textContent = "已从 MAGI API 同步；令牌仍只保留在页面内存。";
     } catch (error) {
       status.className = "status-message error";
@@ -297,6 +324,34 @@ function bind() {
   root.addEventListener("click", (event) => {
     const button = event.target.closest("[data-command]");
     if (button) openCommandDialog(button.dataset.command);
+  });
+  root.addEventListener("submit", async (event) => {
+    const auditForm = event.target.closest("#audit-redaction-form");
+    if (!auditForm) return;
+    event.preventDefault();
+    const button = auditForm.querySelector("button[type=submit]");
+    button.disabled = true;
+    try {
+      pendingAuditIntent ||= createRedactionIntent(
+        auditForm.dataset.decisionId,
+        auditForm.dataset.version,
+        {
+          targetRecordId: auditForm.elements.target_record_id.value.trim(),
+          fieldPath: auditForm.elements.field_path.value.trim(),
+          reason: auditForm.elements.reason.value,
+        },
+      );
+      await submitRedaction(pendingAuditIntent, currentToken);
+      pendingAuditIntent = null;
+      await syncAudit(root, currentView, currentToken);
+      status.className = "status-message";
+      status.textContent = "脱敏覆盖已追加；规范记录未被修改。";
+    } catch (error) {
+      status.className = "status-message error";
+      status.textContent = `${safeText(error.message)} 重试会复用相同幂等键。`;
+    } finally {
+      button.disabled = false;
+    }
   });
   bindCommandDialog(root, status);
   bindAsyncForms(root, status);
@@ -363,6 +418,7 @@ function bindCommandDialog(root, status) {
       const payload = await executeCommand(pendingIntent, currentToken, controller.signal);
       pendingIntent = null;
       renderWorkspace(root, payload);
+      await syncAudit(root, currentView, currentToken, controller.signal);
       status.textContent = "命令已由 MAGI API 接受，工作区已同步到返回状态。";
       dialog.close();
     } catch (error) {
@@ -551,6 +607,7 @@ async function monitorOperation(initial, token, root, status) {
       sessionStorage.removeItem("magi.operation.id");
       const payload = await loadDecision(operation.decisionId, operation.version, token, signal);
       renderWorkspace(root, payload);
+      await syncAudit(root, currentView, token, signal);
       status.textContent = "后台任务完成，已载入权威 DecisionView。";
       return;
     }

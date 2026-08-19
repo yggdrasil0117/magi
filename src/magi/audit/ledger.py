@@ -38,6 +38,14 @@ class AuditChainViolation(ProtocolViolation):
     """Raised when an audit chain is missing, reordered, or altered."""
 
 
+class AuditRedactionConflict(RuntimeError):
+    """Raised when one redaction command identity is reused differently."""
+
+
+class AuditTrailNotFound(LookupError):
+    """Raised when no canonical audit record exists for a decision version."""
+
+
 class AuditDecisionState(MagiModel):
     """Canonical records required to reproduce a decision report."""
 
@@ -74,6 +82,7 @@ class AuditRedaction(MagiModel):
     field_paths: tuple[str, ...] = Field(min_length=1, max_length=50)
     reason: str = Field(min_length=1, max_length=1000)
     actor: str = Field(min_length=1, max_length=120)
+    command_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_paths(self) -> AuditRedaction:
@@ -112,6 +121,44 @@ class AuditRecord(MagiModel):
             raise ValueError("audit payload hash does not match its payload")
         if self.record_hash != _record_hash(self):
             raise ValueError("audit record hash does not match its envelope")
+        return self
+
+
+class AuditRecordView(MagiModel):
+    schema_version: Literal["1.0"] = "1.0"
+    record_id: UUID
+    decision_id: UUID
+    decision_version: int = Field(ge=1)
+    sequence: int = Field(ge=1)
+    kind: Literal["decision_state", "redaction"]
+    classification: DataClassification
+    payload: dict[str, Any]
+    payload_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    previous_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    record_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    occurred_at: datetime
+    redacted_fields: tuple[str, ...] = ()
+
+
+class DecisionAuditTrail(MagiModel):
+    schema_version: Literal["1.0"] = "1.0"
+    decision_id: UUID
+    decision_version: int = Field(ge=1)
+    integrity_status: Literal["verified"] = "verified"
+    record_count: int = Field(ge=0)
+    records: tuple[AuditRecordView, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_count(self) -> DecisionAuditTrail:
+        if self.record_count != len(self.records):
+            raise ValueError("audit record count does not match records")
+        for sequence, record in enumerate(self.records, start=1):
+            if (
+                record.decision_id != self.decision_id
+                or record.decision_version != self.decision_version
+                or record.sequence != sequence
+            ):
+                raise ValueError("audit trail record identity or sequence is invalid")
         return self
 
 
@@ -201,6 +248,18 @@ class DecisionAuditService:
         occurred_at: datetime,
     ) -> AuditRecord:
         records = await self._verified_records(decision_id, decision_version)
+        if redaction.command_id is not None:
+            for record in records:
+                if record.kind != "redaction":
+                    continue
+                stored = AuditRedaction.model_validate(record.payload)
+                if stored.command_id != redaction.command_id:
+                    continue
+                if stored != redaction:
+                    raise AuditRedactionConflict(
+                        "redaction command was already used differently"
+                    )
+                return record
         target = next(
             (record for record in records if record.record_id == redaction.target_record_id),
             None,
@@ -214,6 +273,22 @@ class DecisionAuditService:
             classification=target.classification,
             payload=redaction.model_dump(mode="json"),
             occurred_at=occurred_at,
+        )
+
+    async def trail(
+        self, decision_id: UUID, decision_version: int
+    ) -> DecisionAuditTrail:
+        visible = await self.visible_records(decision_id, decision_version)
+        if not visible:
+            raise AuditTrailNotFound("decision audit trail was not found")
+        records = tuple(
+            AuditRecordView.model_validate(record) for record in visible
+        )
+        return DecisionAuditTrail(
+            decision_id=decision_id,
+            decision_version=decision_version,
+            record_count=len(records),
+            records=records,
         )
 
     async def reconstruct_report(

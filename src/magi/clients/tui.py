@@ -11,7 +11,10 @@ from .workflow_cli import request_json
 
 
 def run(input_fn: Callable[[str], str] = input, output_fn: Callable[[str], None] = print) -> None:
-    output_fn("MAGI TERMINAL / inbox, get, history, create, confirm, run, cancel, watch, quit")
+    output_fn(
+        "MAGI TERMINAL / inbox, get, history, audit, create, confirm, run, "
+        "cancel, redact, watch, quit"
+    )
     while True:
         parts = input_fn("magi> ").strip().split()
         if not parts:
@@ -19,7 +22,10 @@ def run(input_fn: Callable[[str], str] = input, output_fn: Callable[[str], None]
         if parts[0] in {"quit", "exit"}:
             return
         try:
-            identity_commands = {"get", "history", "confirm", "run", "cancel", "watch"}
+            identity_commands = {
+                "get", "history", "audit", "confirm", "run", "cancel",
+                "redact", "watch",
+            }
             if parts[0] in identity_commands and len(parts) >= 2:
                 parts[1] = str(UUID(parts[1]))
             if parts[0] == "inbox":
@@ -31,6 +37,11 @@ def run(input_fn: Callable[[str], str] = input, output_fn: Callable[[str], None]
                 )
             elif parts[0] == "history" and len(parts) == 2:
                 payload = request_json("GET", f"/v1/decisions/{parts[1]}/versions")
+            elif parts[0] == "audit" and len(parts) in {2, 3}:
+                version = parts[2] if len(parts) == 3 else 1
+                payload = request_json(
+                    "GET", f"/v1/decisions/{parts[1]}/audit?version={version}"
+                )
             elif parts[0] == "watch" and len(parts) == 2:
                 payload = request_json("GET", f"/v1/operations/{parts[1]}")
             elif parts[0] == "create" and len(parts) >= 2:
@@ -57,6 +68,22 @@ def run(input_fn: Callable[[str], str] = input, output_fn: Callable[[str], None]
                 payload = request_json(
                     "POST", f"/v1/decisions/{parts[1]}/cancel",
                     body={"version": int(parts[2]) if len(parts) == 3 else 1},
+                )
+            elif parts[0] == "redact" and len(parts) in {4, 5}:
+                target_record_id = str(UUID(parts[2]))
+                version = int(parts[4]) if len(parts) == 5 else 1
+                reason = input_fn("redaction reason> ").strip()
+                if not reason:
+                    output_fn("Redaction reason is required.")
+                    continue
+                payload = request_json(
+                    "POST", f"/v1/decisions/{parts[1]}/audit/redactions",
+                    body={
+                        "version": version,
+                        "target_record_id": target_record_id,
+                        "field_paths": [parts[3]],
+                        "reason": reason,
+                    },
                 )
             else:
                 output_fn("Unknown command or arguments.")

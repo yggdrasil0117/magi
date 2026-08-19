@@ -5,6 +5,7 @@ import json
 import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
+from uuid import UUID
 
 from magi.clients import tui, workflow_cli
 
@@ -35,6 +36,49 @@ class WorkflowCliTests(unittest.TestCase):
             tui.run(lambda _: next(commands), output.append)
         self.assertTrue(any("Request failed" in line for line in output))
         self.assertNotIn("secret", repr(output))
+
+    def test_audit_and_redaction_use_public_contracts(self) -> None:
+        decision_id = UUID("11111111-1111-4111-8111-111111111111")
+        record_id = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+        with patch.object(workflow_cli, "request_json", return_value={}) as request:
+            with redirect_stdout(io.StringIO()):
+                workflow_cli.main(["audit", str(decision_id), "--version", "2"])
+                workflow_cli.main([
+                    "redact", str(decision_id), str(record_id),
+                    "/case/raw_question", "--reason", "Privacy request",
+                    "--idempotency-key", "audit-command-1",
+                ])
+
+        audit_call, redact_call = request.call_args_list
+        self.assertEqual(
+            audit_call.args,
+            ("GET", f"/v1/decisions/{decision_id}/audit?version=2"),
+        )
+        self.assertEqual(
+            redact_call.args,
+            ("POST", f"/v1/decisions/{decision_id}/audit/redactions"),
+        )
+        self.assertEqual(
+            redact_call.kwargs["body"]["field_paths"],
+            ["/case/raw_question"],
+        )
+        self.assertEqual(redact_call.kwargs["idempotency_key"], "audit-command-1")
+
+    def test_terminal_audit_command_renders_json(self) -> None:
+        decision_id = "11111111-1111-4111-8111-111111111111"
+        commands = iter([f"audit {decision_id} 2", "quit"])
+        output: list[str] = []
+        with patch.object(
+            tui,
+            "request_json",
+            return_value={"integrity_status": "verified"},
+        ) as request:
+            tui.run(lambda _: next(commands), output.append)
+
+        request.assert_called_once_with(
+            "GET", f"/v1/decisions/{decision_id}/audit?version=2"
+        )
+        self.assertTrue(any("verified" in line for line in output))
 
 
 if __name__ == "__main__":

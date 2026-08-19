@@ -12,6 +12,11 @@ in session storage. UI-D4c adds authorized operation and decision inboxes, requi
 action counts, and version comparison. Create authority is enforced by the API,
 not inferred by the page.
 
+M4c adds a separately authorized audit-chain panel and append-only redaction
+form. The panel renders verified sequence, phase, hashes, and redacted fields;
+`audit:read` denial degrades locally without blocking the DecisionView. The
+loopback proxy allowlists only the exact audit read and redaction paths.
+
 ## UI-D2 design fixture
 
 `wireframes/ui-d2.html` is a dependency-free, browser-viewable proposal for the
@@ -39,7 +44,7 @@ node apps/web/server.mjs
 ~~~
 
 Open `http://127.0.0.1:3000`. The local server binds only to loopback and allowlists
-decision and final-report reads, so the production API does not need a permissive
+decision, report, and audit resources, so the production API does not need a permissive
 CORS policy. Static and proxied responses include a restrictive CSP and no-store
 headers.
 

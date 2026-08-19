@@ -40,6 +40,14 @@ from magi.application import (
 )
 from magi.domain import ProtocolViolation
 from magi.domain.models import utc_now
+from magi.audit import (
+    AuditRecord,
+    AuditRecordView,
+    AuditRedaction,
+    AuditRedactionConflict,
+    AuditTrailNotFound,
+    DecisionAuditTrail,
+)
 
 from .auth import (
     ApiAuthenticationError,
@@ -54,11 +62,13 @@ from .models import (
     ConfirmDecisionCommand,
     CreateDecisionCommand,
     RunDecisionCommand,
+    RedactAuditCommand,
 )
 
 
 IDEMPOTENCY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$"
 CREATION_NAMESPACE = UUID("7d064bfc-7ab6-4e37-a7ad-94d92b967a23")
+REDACTION_NAMESPACE = UUID("ec1e035c-5ac9-47a1-950e-18e8d0702b1b")
 
 
 class MarkdownResponse(Response):
@@ -93,12 +103,28 @@ class ReadinessProbe(Protocol):
     async def is_ready(self) -> bool: ...
 
 
+class AuditApiService(Protocol):
+    async def trail(
+        self, decision_id: UUID, decision_version: int
+    ) -> DecisionAuditTrail: ...
+
+    async def redact(
+        self,
+        decision_id: UUID,
+        decision_version: int,
+        redaction: AuditRedaction,
+        *,
+        occurred_at: datetime,
+    ) -> AuditRecord: ...
+
+
 def create_app(
     service: DecisionApiService,
     authorizer: DecisionAuthorizer,
     *,
     idempotency_store: CommandIdempotencyStore | None = None,
     operation_store: OperationStore | None = None,
+    audit_service: AuditApiService | None = None,
     lifespan: Callable[[FastAPI], AbstractAsyncContextManager[None]] | None = None,
     readiness_probe: ReadinessProbe | None = None,
 ) -> FastAPI:
@@ -222,6 +248,28 @@ def create_app(
             409,
             "idempotency_conflict",
             "The idempotency key was already used for another command.",
+        )
+
+    @app.exception_handler(AuditRedactionConflict)
+    async def audit_redaction_conflict(
+        request: Request,
+        exc: AuditRedactionConflict,
+    ) -> JSONResponse:
+        return _error_response(
+            409,
+            "idempotency_conflict",
+            "The idempotency key was already used for another command.",
+        )
+
+    @app.exception_handler(AuditTrailNotFound)
+    async def audit_not_found(
+        request: Request,
+        exc: AuditTrailNotFound,
+    ) -> JSONResponse:
+        return _error_response(
+            404,
+            "audit_not_found",
+            "The requested decision audit trail was not found.",
         )
 
     @app.exception_handler(ProtocolViolation)
@@ -413,6 +461,56 @@ def create_app(
     ) -> DecisionReport:
         response.headers.update(_private_report_headers())
         return await load_report(decision_id, version, principal)
+
+    @app.get(
+        "/v1/decisions/{decision_id}/audit",
+        response_model=DecisionAuditTrail,
+        responses=_error_models(401, 403, 404, 409, 422, 503),
+    )
+    async def get_decision_audit(
+        decision_id: UUID,
+        response: Response,
+        principal: PrincipalDependency,
+        version: Annotated[int, Query(ge=1)] = 1,
+    ) -> DecisionAuditTrail:
+        await authorizer.authorize(principal, decision_id, "audit:read")
+        audit = _require_audit_service(audit_service)
+        trail = await audit.trail(decision_id, version)
+        response.headers.update(_private_report_headers())
+        return trail
+
+    @app.post(
+        "/v1/decisions/{decision_id}/audit/redactions",
+        response_model=AuditRecordView,
+        responses=_error_models(401, 403, 409, 422, 503),
+    )
+    async def redact_decision_audit(
+        decision_id: UUID,
+        command: RedactAuditCommand,
+        idempotency_key: IdempotencyDependency,
+        response: Response,
+        principal: PrincipalDependency,
+    ) -> AuditRecordView:
+        await authorizer.authorize(principal, decision_id, "audit:redact")
+        audit = _require_audit_service(audit_service)
+        record = await audit.redact(
+            decision_id,
+            command.version,
+            AuditRedaction(
+                target_record_id=command.target_record_id,
+                field_paths=command.field_paths,
+                reason=command.reason,
+                actor=principal.subject,
+                command_id=_redaction_command_id(
+                    principal.subject,
+                    decision_id,
+                    idempotency_key,
+                ),
+            ),
+            occurred_at=utc_now(),
+        )
+        response.headers.update(_private_report_headers())
+        return AuditRecordView.model_validate(record.model_dump())
 
     @app.get(
         "/v1/decisions/{decision_id}/report.md",
@@ -659,6 +757,17 @@ def _creation_decision_id(principal: str, idempotency_key: str) -> UUID:
     return uuid5(CREATION_NAMESPACE, material)
 
 
+def _redaction_command_id(
+    principal: str, decision_id: UUID, idempotency_key: str
+) -> UUID:
+    material = hashlib.sha256(
+        f"magi-redaction-v1\0{principal}\0{decision_id}\0{idempotency_key}".encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    return uuid5(REDACTION_NAMESPACE, material)
+
+
 def _error_response(
     status_code: int,
     code: str,
@@ -696,6 +805,12 @@ def _require_operation_store(store: OperationStore | None) -> OperationStore:
     if store is None:
         raise StarletteHTTPException(status_code=503)
     return store
+
+
+def _require_audit_service(service: AuditApiService | None) -> AuditApiService:
+    if service is None:
+        raise StarletteHTTPException(status_code=503)
+    return service
 
 
 def _accepted_operation(receipt: OperationReceipt) -> JSONResponse:

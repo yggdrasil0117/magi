@@ -73,6 +73,9 @@ def build_parser() -> argparse.ArgumentParser:
     get.add_argument("--version", type=_bounded_positive, default=1)
     history = sub.add_parser("history")
     history.add_argument("decision_id", type=UUID)
+    audit = sub.add_parser("audit")
+    audit.add_argument("decision_id", type=UUID)
+    audit.add_argument("--version", type=_bounded_positive, default=1)
     create = sub.add_parser("create")
     create.add_argument("question")
     create.add_argument("--risk", choices=("low", "medium", "high", "critical"), default="low")
@@ -98,6 +101,13 @@ def build_parser() -> argparse.ArgumentParser:
     cancel.add_argument("--version", type=_bounded_positive, default=1)
     cancel.add_argument("--reason")
     cancel.add_argument("--idempotency-key")
+    redact = sub.add_parser("redact")
+    redact.add_argument("decision_id", type=UUID)
+    redact.add_argument("target_record_id", type=UUID)
+    redact.add_argument("field_path")
+    redact.add_argument("--reason", required=True)
+    redact.add_argument("--version", type=_bounded_positive, default=1)
+    redact.add_argument("--idempotency-key")
     return parser
 
 
@@ -108,6 +118,10 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         return request_json("GET", f"/v1/decisions/{args.decision_id}?version={args.version}")
     if args.command == "history":
         return request_json("GET", f"/v1/decisions/{args.decision_id}/versions")
+    if args.command == "audit":
+        return request_json(
+            "GET", f"/v1/decisions/{args.decision_id}/audit?version={args.version}"
+        )
     if args.command == "create":
         return request_json("POST", "/v1/decisions", body={
             "raw_question": args.question,
@@ -131,6 +145,17 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         return request_json(
             "POST", f"/v1/decisions/{args.decision_id}/cancel",
             body={"version": args.version, "reason": args.reason},
+            idempotency_key=args.idempotency_key,
+        )
+    if args.command == "redact":
+        return request_json(
+            "POST", f"/v1/decisions/{args.decision_id}/audit/redactions",
+            body={
+                "version": args.version,
+                "target_record_id": str(args.target_record_id),
+                "field_paths": [args.field_path],
+                "reason": args.reason,
+            },
             idempotency_key=args.idempotency_key,
         )
     return request_json("GET", f"/v1/operations/{args.operation_id}")

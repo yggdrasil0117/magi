@@ -36,7 +36,12 @@ from magi.application import (
     OperationStatus,
 )
 from magi.agents import ScriptedPerspectiveRunner
-from magi.domain import AgentName
+from magi.domain import AgentName, DataClassification
+from magi.audit import (
+    AuditRedaction,
+    DecisionAuditTrail,
+    InMemoryAuditLedger,
+)
 from magi.orchestration import build_langgraph_workflow
 from tests.fixtures.factories import (
     DECISION_ID,
@@ -133,6 +138,39 @@ class FakeReadinessProbe:
         if self.error is not None:
             raise self.error
         return self.ready
+
+
+class FakeAuditService:
+    def __init__(self) -> None:
+        self.ledger = InMemoryAuditLedger()
+        self.trail_calls: list[tuple[UUID, int]] = []
+        self.redact_calls: list[tuple[UUID, int, AuditRedaction]] = []
+
+    async def trail(self, decision_id: UUID, version: int) -> DecisionAuditTrail:
+        self.trail_calls.append((decision_id, version))
+        return DecisionAuditTrail(
+            decision_id=decision_id,
+            decision_version=version,
+            record_count=0,
+        )
+
+    async def redact(
+        self,
+        decision_id: UUID,
+        version: int,
+        redaction: AuditRedaction,
+        *,
+        occurred_at: datetime,
+    ):
+        self.redact_calls.append((decision_id, version, redaction))
+        return await self.ledger.append(
+            decision_id=decision_id,
+            decision_version=version,
+            kind="redaction",
+            classification=DataClassification.INTERNAL,
+            payload=redaction.model_dump(mode="json"),
+            occurred_at=occurred_at,
+        )
 
 
 class FakeOperationStore:
@@ -236,11 +274,13 @@ class FastApiAdapterTests(unittest.TestCase):
         self.service = FakeDecisionService()
         self.authorizer = FakeAuthorizer()
         self.operation_store = FakeOperationStore()
+        self.audit_service = FakeAuditService()
         self.client = TestClient(
             create_app(
                 self.service,
                 self.authorizer,
                 operation_store=self.operation_store,
+                audit_service=self.audit_service,
             ),
             raise_server_exceptions=False,
         )
@@ -424,6 +464,64 @@ class FastApiAdapterTests(unittest.TestCase):
             str(request.evidence_sources[0].url),
             "https://evidence.example/release",
         )
+
+    def test_audit_read_uses_separate_permission_and_private_headers(self) -> None:
+        response = self.client.get(
+            self.path("audit") + "?version=2",
+            headers=self.auth,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["integrity_status"], "verified")
+        self.assertEqual(response.headers["cache-control"], "private, no-store")
+        self.assertEqual(self.audit_service.trail_calls, [(DECISION_ID, 2)])
+        self.assertEqual(
+            self.authorizer.authorizations[-1],
+            ("user-1", DECISION_ID, "audit:read"),
+        )
+
+    def test_audit_redaction_is_idempotent_and_actor_is_server_owned(self) -> None:
+        body = {
+            "version": 1,
+            "target_record_id": str(uuid4()),
+            "field_paths": ["/case/raw_question"],
+            "reason": "Remove operator-visible question text.",
+        }
+        headers = self.command_headers("audit-redact-01")
+
+        first = self.client.post(
+            self.path("audit/redactions"), headers=headers, json=body
+        )
+        repeated = self.client.post(
+            self.path("audit/redactions"), headers=headers, json=body
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json(), repeated.json())
+        redaction = self.audit_service.redact_calls[0][2]
+        self.assertEqual(redaction.actor, "user-1")
+        self.assertIsNotNone(redaction.command_id)
+        self.assertNotIn("audit-redact-01", first.text)
+        self.assertEqual(
+            self.authorizer.authorizations[-1],
+            ("user-1", DECISION_ID, "audit:redact"),
+        )
+
+    def test_audit_redaction_rejects_invalid_path_without_service_call(self) -> None:
+        response = self.client.post(
+            self.path("audit/redactions"),
+            headers=self.command_headers("audit-redact-02"),
+            json={
+                "version": 1,
+                "target_record_id": str(uuid4()),
+                "field_paths": ["case/raw_question"],
+                "reason": "Invalid pointer.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "request_validation_failed")
+        self.assertEqual(self.audit_service.redact_calls, [])
 
     def test_create_rejects_unsafe_evidence_source_url(self) -> None:
         response = self.client.post(

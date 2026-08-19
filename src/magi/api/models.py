@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import AnyHttpUrl, Field, model_validator
 
@@ -67,6 +68,27 @@ class RunDecisionCommand(MagiModel):
 class CancelDecisionCommand(MagiModel):
     version: int = Field(default=1, ge=1)
     reason: str | None = Field(default=None, max_length=2000)
+
+
+class RedactAuditCommand(MagiModel):
+    version: int = Field(default=1, ge=1)
+    target_record_id: UUID
+    field_paths: tuple[str, ...] = Field(min_length=1, max_length=50)
+    reason: str = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def require_simple_unique_paths(self) -> RedactAuditCommand:
+        if any(
+            not path.startswith("/")
+            or path == "/"
+            or "~" in path
+            or any(not part for part in path.split("/")[1:])
+            for path in self.field_paths
+        ):
+            raise ValueError("redaction paths must be simple JSON pointers")
+        if len(set(self.field_paths)) != len(self.field_paths):
+            raise ValueError("redaction paths must be unique")
+        return self
 
 
 class ApiErrorDetail(MagiModel):

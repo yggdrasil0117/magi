@@ -252,6 +252,7 @@ def create_production_app(
     selected_coordinator_factory = coordinator_factory or _build_coordinator
     runtime = selected_runtime_factory(selected_settings)
     operation_store = getattr(runtime, "operation_store", None)
+    audit_service = DecisionAuditService(runtime.audit_ledger)
     deferred_service = _DeferredDecisionService()
     readiness_probe = _ProductionReadinessProbe(runtime, deferred_service)
 
@@ -277,7 +278,7 @@ def create_production_app(
                 graph,
                 normalizer=coordinator,
                 evidence_gateway=evidence_gateway,
-                auditor=DecisionAuditService(runtime.audit_ledger),
+                auditor=audit_service,
             )
             deferred_service.bind(application_service)
             if operation_store is not None:
@@ -304,6 +305,7 @@ def create_production_app(
         selected_authorizer,
         idempotency_store=runtime.command_idempotency_store,
         operation_store=operation_store,
+        audit_service=audit_service,
         lifespan=lifespan,
         readiness_probe=readiness_probe,
     )

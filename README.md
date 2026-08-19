@@ -50,6 +50,9 @@ M4b advances to version 0.4.0a2 with a PostgreSQL-backed append-only audit chain
 additive redaction overlays, integrity verification, retry repair, and final-report
 reconstruction that does not depend on LangGraph checkpoints.
 
+M4c closes M4 at version 0.4.0 with separately authorized audit/redaction APIs
+and matching EVA-inspired Web, keyboard-first TUI, and automation CLI surfaces.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -95,6 +98,7 @@ M3b report transport is documented in docs/m3b-report-api-export.md.
 M3 acceptance and client parity are documented in docs/m3c-client-parity-acceptance.md.
 Controlled evidence retrieval is documented in docs/m4a-controlled-evidence-retrieval.md.
 Append-only audit and report reconstruction are documented in docs/m4b-append-only-audit.md.
+M4 audit API and client acceptance are documented in docs/m4c-audit-api-ui.md.
 The cross-cutting Web/TUI interface plan is documented in docs/ui-design-plan.md.
 The accepted UI-D1 journeys and information architecture are documented in
 docs/ui-d1-information-architecture.md.

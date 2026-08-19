@@ -30,6 +30,8 @@ scoped by the authenticated principal.
 | POST /v1/decisions/{id}/revisions | Create a new version |
 | GET /v1/decisions/{id}/report | Read the final report |
 | GET /v1/decisions/{id}/report.md | Download the final report as Markdown |
+| GET /v1/decisions/{id}/audit | Read the verified visible audit chain |
+| POST /v1/decisions/{id}/audit/redactions | Append a redaction overlay |
 | GET /v1/decisions/{id}/events | Replay authorized public events |
 | GET /v1/decisions | List authorized decisions |
 
@@ -47,6 +49,12 @@ reuse `decision:read` authorization because they expose the same report fields,
 return `report_not_ready` until arbitration completes, and set private no-store
 cache controls. Report routes do not accept idempotency keys because they are
 read-only.
+
+M4c requires the separate `audit:read` action for audit history and
+`audit:redact` for redaction overlays. Redaction commands require an idempotency
+key and accept a decision version, target audit record ID, simple JSON Pointer
+paths, and a reason. Actor, command identity, and occurrence time are server
+owned. Audit responses are private and never cacheable.
 
 Decision creation requires the explicit `decision:create` permission. The
 server derives a stable decision ID from the authenticated principal and

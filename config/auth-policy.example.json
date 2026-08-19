@@ -9,7 +9,9 @@
         "decision:read",
         "decision:confirm",
         "decision:run",
-        "decision:cancel"
+        "decision:cancel",
+        "audit:read",
+        "audit:redact"
       ],
       "decision_ids": [],
       "allow_all_decisions": true

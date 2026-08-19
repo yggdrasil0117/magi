@@ -8,6 +8,7 @@ const id = "11111111-1111-4111-8111-111111111111";
 test("proxy allows only versioned decision reads and JSON reports", () => {
   assert.equal(isAllowedDecisionApiPath(`/api/v1/decisions/${id}`), true);
   assert.equal(isAllowedDecisionApiPath(`/api/v1/decisions/${id}/report`), true);
+  assert.equal(isAllowedDecisionApiPath(`/api/v1/decisions/${id}/audit`), true);
   assert.equal(isAllowedDecisionApiPath(`/api/v1/decisions/${id}/confirm`), false);
   assert.equal(isAllowedDecisionApiPath("/api/v1/decisions/not-a-uuid"), false);
   assert.equal(isAllowedDecisionApiPath(`/api/v1/decisions/${id}/report.md`), false);
@@ -35,6 +36,7 @@ test("proxy permits accepted commands and operation replay only", () => {
   assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/cancel`), true);
   assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/run`), true);
   assert.equal(isAllowedApiOperation("POST", "/api/v1/decisions"), true);
+  assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/audit/redactions`), true);
   assert.equal(isAllowedApiOperation("GET", `/api/v1/operations/${id}`), true);
   assert.equal(isAllowedApiOperation("GET", `/api/v1/operations/${id}/events`), true);
   assert.equal(isAllowedApiOperation("GET", "/api/v1/operations"), true);
@@ -60,5 +62,16 @@ test("proxy permits accepted commands and operation replay only", () => {
   assert.equal(
     upstreamPath(new URL("/api/v1/operations?limit=50", "http://localhost")),
     "/v1/operations?limit=50",
+  );
+  assert.equal(
+    upstreamPath(new URL(`/api/v1/decisions/${id}/audit?version=2`, "http://localhost")),
+    `/v1/decisions/${id}/audit?version=2`,
+  );
+  assert.throws(
+    () => upstreamPath(
+      new URL(`/api/v1/decisions/${id}/audit/redactions?version=1`, "http://localhost"),
+      "POST",
+    ),
+    /query|Mutation/,
   );
 });

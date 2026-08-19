@@ -20,7 +20,8 @@ for decisive reports, 2 for advisory/non-decisive reports, 3 for degraded runs,
 4 for failed runs, and 5 for client or transport errors.
 
 The keyboard-first `magi-tui` workflow now covers inbox, get, history, create,
-confirm, run, cancel, and operation watch through the public API. It deliberately
+confirm, run, cancel, audit-chain inspection, redaction, and operation watch
+through the public API. It deliberately
 uses a dependency-free terminal shell so redirected/no-color behavior remains
 predictable; it never imports the decision engine.
 

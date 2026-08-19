@@ -1,6 +1,8 @@
 const UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}";
 const DECISION = new RegExp(`^/api/v1/decisions/${UUID}$`);
 const REPORT = new RegExp(`^/api/v1/decisions/${UUID}/report$`);
+const AUDIT = new RegExp(`^/api/v1/decisions/${UUID}/audit$`);
+const AUDIT_REDACTIONS = new RegExp(`^/api/v1/decisions/${UUID}/audit/redactions$`);
 const CONFIRM = new RegExp(`^/api/v1/decisions/${UUID}/confirm$`);
 const CANCEL = new RegExp(`^/api/v1/decisions/${UUID}/cancel$`);
 const RUN = new RegExp(`^/api/v1/decisions/${UUID}/run$`);
@@ -11,7 +13,7 @@ const DECISION_INBOX = "/api/v1/decisions";
 const DECISION_VERSIONS = new RegExp(`^/api/v1/decisions/${UUID}/versions$`);
 
 export function isAllowedDecisionApiPath(pathname) {
-  return DECISION.test(pathname) || REPORT.test(pathname);
+  return DECISION.test(pathname) || REPORT.test(pathname) || AUDIT.test(pathname);
 }
 
 export function isAllowedApiOperation(method, pathname) {
@@ -27,7 +29,8 @@ export function isAllowedApiOperation(method, pathname) {
     return pathname === "/api/v1/decisions"
       || CONFIRM.test(pathname)
       || CANCEL.test(pathname)
-      || RUN.test(pathname);
+      || RUN.test(pathname)
+      || AUDIT_REDACTIONS.test(pathname);
   }
   return false;
 }

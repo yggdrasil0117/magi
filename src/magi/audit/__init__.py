@@ -5,7 +5,11 @@ from .ledger import (
     AuditDecisionState,
     AuditLedger,
     AuditRecord,
+    AuditRecordView,
     AuditRedaction,
+    AuditRedactionConflict,
+    AuditTrailNotFound,
+    DecisionAuditTrail,
     DecisionAuditService,
     InMemoryAuditLedger,
 )
@@ -15,7 +19,11 @@ __all__ = [
     "AuditDecisionState",
     "AuditLedger",
     "AuditRecord",
+    "AuditRecordView",
     "AuditRedaction",
+    "AuditRedactionConflict",
+    "AuditTrailNotFound",
+    "DecisionAuditTrail",
     "DecisionAuditService",
     "InMemoryAuditLedger",
 ]
