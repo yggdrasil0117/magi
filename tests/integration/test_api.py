@@ -398,6 +398,12 @@ class FastApiAdapterTests(unittest.TestCase):
                     "classification": "internal",
                 }
             ],
+            "evidence_sources": [
+                {
+                    "url": "https://evidence.example/release",
+                    "classification": "internal",
+                }
+            ],
         }
         headers = self.command_headers("create-command-01")
 
@@ -414,6 +420,27 @@ class FastApiAdapterTests(unittest.TestCase):
         )
         request = self.service.calls[0][3]
         self.assertIsInstance(request, DecisionPreparationRequest)
+        self.assertEqual(
+            str(request.evidence_sources[0].url),
+            "https://evidence.example/release",
+        )
+
+    def test_create_rejects_unsafe_evidence_source_url(self) -> None:
+        response = self.client.post(
+            "/v1/decisions",
+            headers=self.command_headers("unsafe-source-01"),
+            json={
+                "raw_question": "Should we deploy?",
+                "evidence_sources": [
+                    {"url": "http://127.0.0.1/private", "classification": "internal"}
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "request_validation_failed")
+        self.assertNotIn("127.0.0.1", response.text)
+        self.assertEqual(self.service.calls, [])
 
     def test_create_failure_is_sanitized_and_not_cached(self) -> None:
         self.service.error = DecisionPreparationFailed("secret coordinator detail")
@@ -444,7 +471,10 @@ class FastApiAdapterTests(unittest.TestCase):
         response = self.client.post(
             "/v1/decisions",
             headers=headers,
-            json={"raw_question": "Should this run asynchronously?"},
+            json={
+                "raw_question": "Should this run asynchronously?",
+                "evidence_sources": [{"url": "https://evidence.example/status"}],
+            },
         )
 
         self.assertEqual(response.status_code, 202)
@@ -457,6 +487,10 @@ class FastApiAdapterTests(unittest.TestCase):
         self.assertEqual(
             self.operation_store.accept_calls[0]["kind"],
             OperationKind.CREATE_DECISION,
+        )
+        self.assertEqual(
+            self.operation_store.accept_calls[0]["request_payload"]["evidence_sources"][0]["url"],
+            "https://evidence.example/status",
         )
 
     def test_async_run_can_be_polled_and_events_replayed(self) -> None:

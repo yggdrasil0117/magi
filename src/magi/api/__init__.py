@@ -16,6 +16,7 @@ from .models import (
     CancelDecisionCommand,
     ConfirmDecisionCommand,
     CreateDecisionCommand,
+    EvidenceSourceCommand,
     RunDecisionCommand,
     SuppliedEvidenceCommand,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "CreateDecisionCommand",
     "DecisionApiService",
     "DecisionAuthorizer",
+    "EvidenceSourceCommand",
     "HashedBearerAuthorizer",
     "HashedBearerCredential",
     "HashedBearerPolicy",

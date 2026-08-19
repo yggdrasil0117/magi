@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from collections.abc import Callable, Mapping, Sequence
@@ -26,6 +27,7 @@ from magi.domain import (
 from magi.domain.models import utc_now
 from magi.orchestration import ConfirmationPayload, RunPayload, decision_thread_id
 
+from .evidence import EvidenceRetrievalError, EvidenceRetrievalGateway
 from .models import DecisionView, DecisionViewProjector
 from .preparation import DecisionPreparationFailed, DecisionPreparationRequest
 
@@ -62,11 +64,13 @@ class DecisionApplicationService:
         graph: DecisionGraph,
         *,
         normalizer: DecisionNormalizer | None = None,
+        evidence_gateway: EvidenceRetrievalGateway | None = None,
         projector: DecisionViewProjector | None = None,
         clock: Callable[[], datetime] = utc_now,
     ) -> None:
         self._graph = graph
         self._normalizer = normalizer
+        self._evidence_gateway = evidence_gateway
         self._projector = projector or DecisionViewProjector()
         self._clock = clock
 
@@ -85,6 +89,10 @@ class DecisionApplicationService:
                     "the decision already has different preparation inputs"
                 )
             return self._projector.project(saved_values)
+        if request.evidence_sources and self._evidence_gateway is None:
+            raise DecisionPreparationFailed(
+                "evidence retrieval gateway is not configured"
+            )
         try:
             case = await self._normalizer.normalize(
                 NormalizationRequest(
@@ -98,10 +106,25 @@ class DecisionApplicationService:
         except CoordinatorExecutionError as exc:
             raise DecisionPreparationFailed("decision normalization failed") from exc
 
+        retrieved = ()
+        if request.evidence_sources:
+            assert self._evidence_gateway is not None
+            try:
+                retrieved = tuple(
+                    await asyncio.gather(
+                        *(
+                            self._evidence_gateway.retrieve(source)
+                            for source in request.evidence_sources
+                        )
+                    )
+                )
+            except EvidenceRetrievalError as exc:
+                raise DecisionPreparationFailed("evidence retrieval failed") from exc
+
         prepared_at = self._clock()
         if prepared_at.tzinfo is None:
             raise ProtocolViolation("decision preparation clock must be timezone-aware")
-        evidence = tuple(
+        supplied_evidence = tuple(
             EvidenceItem(
                 evidence_id=f"E-{index:03d}",
                 source_type=item.source_type,
@@ -114,12 +137,27 @@ class DecisionApplicationService:
             )
             for index, item in enumerate(request.evidence, start=1)
         )
+        retrieved_evidence = tuple(
+            EvidenceItem(
+                evidence_id=f"E-{index:03d}",
+                source_type=item.source_type,
+                source=item.source,
+                captured_at=item.captured_at,
+                content_hash=item.content_hash,
+                excerpt=item.excerpt,
+                verification_status=VerificationStatus.VERIFIED,
+                classification=item.classification,
+            )
+            for index, item in enumerate(
+                retrieved, start=len(supplied_evidence) + 1
+            )
+        )
         snapshot = EvidenceSnapshot(
             decision_id=case.decision_id,
             decision_version=case.version,
             created_at=prepared_at,
             frozen_at=prepared_at,
-            evidence=evidence,
+            evidence=supplied_evidence + retrieved_evidence,
         )
         return await self.wait_for_confirmation(
             case,

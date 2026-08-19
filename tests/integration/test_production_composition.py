@@ -188,3 +188,28 @@ class ProductionCompositionTests(unittest.TestCase):
         }
         with self.assertRaises(ProductionConfigurationError):
             ProductionSettings.from_mapping(values)
+
+        configured = ProductionSettings.from_mapping(
+            {
+                **values,
+                "MAGI_POSTGRES_MAX_SIZE": "4",
+                "MAGI_EVIDENCE_ALLOWED_HOSTS": " evidence.example,docs.example ",
+                "MAGI_EVIDENCE_TIMEOUT_SECONDS": "3.5",
+                "MAGI_EVIDENCE_MAX_RESPONSE_BYTES": "12000",
+            }
+        )
+        self.assertEqual(
+            configured.evidence_allowed_hosts,
+            frozenset({"evidence.example", "docs.example"}),
+        )
+        self.assertEqual(configured.evidence_timeout_seconds, 3.5)
+        self.assertEqual(configured.evidence_max_response_bytes, 12_000)
+
+        with self.assertRaises(ProductionConfigurationError):
+            ProductionSettings.from_mapping(
+                {
+                    **values,
+                    "MAGI_POSTGRES_MAX_SIZE": "4",
+                    "MAGI_EVIDENCE_ALLOWED_HOSTS": "*.example.com",
+                }
+            )

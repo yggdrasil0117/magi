@@ -20,6 +20,7 @@ from magi.application import (
     CommandIdempotencyStore,
     DecisionPreparationFailed,
     DecisionPreparationRequest,
+    EvidenceSourceRequest,
     DecisionCatalog,
     DecisionHistory,
     DecisionReport,
@@ -339,6 +340,10 @@ def create_app(
             evidence=tuple(
                 SuppliedEvidence.model_validate(item.model_dump())
                 for item in command.evidence
+            ),
+            evidence_sources=tuple(
+                EvidenceSourceRequest.model_validate(item.model_dump())
+                for item in command.evidence_sources
             ),
         )
         if _respond_async(prefer):

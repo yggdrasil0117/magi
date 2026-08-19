@@ -41,6 +41,11 @@ Both read the same authenticated report endpoint and share one versioned majorit
 fixture for parity acceptance. The terminal strips external control characters;
 the browser uses text-only DOM insertion and a loopback same-origin proxy.
 
+M4a starts M4 at version 0.4.0a1 with controlled read-only HTTPS evidence retrieval. Production uses an
+exact-host allowlist that is empty by default, rejects private-network and peer
+address changes, bounds textual responses, and freezes normalized content with a
+server-calculated hash before confirmation.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -84,6 +89,7 @@ M2 acceptance closure is documented in docs/m2c6-acceptance-closure.md.
 M3a reporting is documented in docs/m3a-decision-report.md.
 M3b report transport is documented in docs/m3b-report-api-export.md.
 M3 acceptance and client parity are documented in docs/m3c-client-parity-acceptance.md.
+Controlled evidence retrieval is documented in docs/m4a-controlled-evidence-retrieval.md.
 The cross-cutting Web/TUI interface plan is documented in docs/ui-design-plan.md.
 The accepted UI-D1 journeys and information architecture are documented in
 docs/ui-d1-information-architecture.md.

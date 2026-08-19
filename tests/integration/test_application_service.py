@@ -19,6 +19,9 @@ from magi.application import (
     DecisionApplicationService,
     DecisionPreparationFailed,
     DecisionPreparationRequest,
+    EvidenceRetrievalError,
+    EvidenceSourceRequest,
+    RetrievedEvidence,
     DecisionWorkflowConflict,
     DecisionWorkflowNotFound,
     SuppliedEvidence,
@@ -55,6 +58,26 @@ class FakeNormalizer:
         )
 
 
+class FakeEvidenceGateway:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.requests: list[EvidenceSourceRequest] = []
+
+    async def retrieve(self, request: EvidenceSourceRequest) -> RetrievedEvidence:
+        self.requests.append(request)
+        if self.error is not None:
+            raise self.error
+        excerpt = "Retrieved release status: ready."
+        return RetrievedEvidence(
+            source_type="retrieved_https",
+            source=str(request.url),
+            captured_at=datetime(2026, 8, 18, 15, 45, tzinfo=timezone.utc),
+            excerpt=excerpt,
+            content_hash=hashlib.sha256(excerpt.encode("utf-8")).hexdigest(),
+            classification=request.classification,
+        )
+
+
 class DecisionApplicationServiceTests(unittest.IsolatedAsyncioTestCase):
     def build_service(
         self,
@@ -73,6 +96,7 @@ class DecisionApplicationServiceTests(unittest.IsolatedAsyncioTestCase):
         normalizer: FakeNormalizer,
         *,
         clock: Callable[[], datetime] | None = None,
+        evidence_gateway: FakeEvidenceGateway | None = None,
     ) -> tuple[DecisionApplicationService, ScriptedPerspectiveRunner]:
         case = make_case(confirmed=False)
         runner = ScriptedPerspectiveRunner(
@@ -80,11 +104,16 @@ class DecisionApplicationServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         graph = build_langgraph_workflow(runner, checkpointer=InMemorySaver())
         if clock is None:
-            return DecisionApplicationService(graph, normalizer=normalizer), runner
+            return DecisionApplicationService(
+                graph,
+                normalizer=normalizer,
+                evidence_gateway=evidence_gateway,
+            ), runner
         return (
             DecisionApplicationService(
                 graph,
                 normalizer=normalizer,
+                evidence_gateway=evidence_gateway,
                 clock=clock,
             ),
             runner,
@@ -261,6 +290,59 @@ class DecisionApplicationServiceTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
         self.assertEqual(len(normalizer.requests), 1)
+
+    async def test_prepare_freezes_verified_retrieval_once(self) -> None:
+        gateway = FakeEvidenceGateway()
+        normalizer = FakeNormalizer()
+        service, _ = self.build_preparation_service(
+            normalizer,
+            evidence_gateway=gateway,
+        )
+        request = DecisionPreparationRequest(
+            decision_id=uuid4(),
+            raw_question="Should we deploy?",
+            evidence_sources=(
+                EvidenceSourceRequest(url="https://evidence.example/status"),
+            ),
+        )
+
+        first = await service.prepare(request)
+        repeated = await service.prepare(request)
+
+        self.assertEqual(first, repeated)
+        self.assertEqual(len(gateway.requests), 1)
+        self.assertEqual(first.evidence[0].evidence_id, "E-001")
+        self.assertEqual(
+            first.evidence[0].verification_status,
+            VerificationStatus.VERIFIED,
+        )
+        self.assertEqual(
+            first.evidence[0].content_hash,
+            hashlib.sha256(first.evidence[0].excerpt.encode("utf-8")).hexdigest(),
+        )
+
+    async def test_prepare_fails_closed_and_sanitizes_retrieval_error(self) -> None:
+        request = DecisionPreparationRequest(
+            decision_id=uuid4(),
+            raw_question="Should we deploy?",
+            evidence_sources=(
+                EvidenceSourceRequest(url="https://evidence.example/status"),
+            ),
+        )
+        missing, _ = self.build_preparation_service(FakeNormalizer())
+        with self.assertRaisesRegex(DecisionPreparationFailed, "not configured"):
+            await missing.prepare(request)
+
+        gateway = FakeEvidenceGateway(
+            EvidenceRetrievalError("private upstream response and secret URL")
+        )
+        configured, _ = self.build_preparation_service(
+            FakeNormalizer(), evidence_gateway=gateway
+        )
+        with self.assertRaises(DecisionPreparationFailed) as raised:
+            await configured.prepare(request.model_copy(update={"decision_id": uuid4()}))
+        self.assertEqual(str(raised.exception), "evidence retrieval failed")
+        self.assertNotIn("secret URL", str(raised.exception))
 
     async def test_prepare_sanitizes_coordinator_failure(self) -> None:
         normalizer = FakeNormalizer(

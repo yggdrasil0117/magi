@@ -111,6 +111,8 @@ and Web/TUI render the same authoritative decision semantics.
 
 ## M4: Evidence and audit
 
+Status: M4a controlled retrieval implemented; durable audit and redaction pending.
+
 - Add read-only retrieval gateway.
 - Freeze and hash evidence.
 - Validate citations.
@@ -119,6 +121,11 @@ and Web/TUI render the same authoritative decision semantics.
   in parallel through UI-D1 to UI-D3.
 
 Exit criterion: a completed report can be reconstructed from stored records.
+
+M4a adds a fail-closed read-only HTTPS gateway, exact-host production allowlist,
+SSRF and response-size controls, content normalization and hashing, API source
+requests, and retry-stable snapshot freezing. It does not yet satisfy the M4 exit
+criterion because canonical append-only audit and redaction records remain.
 
 ## M5: Clients and evaluation
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import Field, model_validator
+from pydantic import AnyHttpUrl, Field, model_validator
 
 from magi.domain import DataClassification, RiskLevel
 from magi.domain.models import MagiModel
@@ -24,11 +24,29 @@ class SuppliedEvidenceCommand(MagiModel):
         return self
 
 
+class EvidenceSourceCommand(MagiModel):
+    url: AnyHttpUrl
+    classification: DataClassification = DataClassification.INTERNAL
+
+    @model_validator(mode="after")
+    def require_safe_https_url(self) -> EvidenceSourceCommand:
+        if self.url.scheme != "https":
+            raise ValueError("evidence sources must use HTTPS")
+        if self.url.username is not None or self.url.password is not None:
+            raise ValueError("evidence source credentials are forbidden")
+        if self.url.port not in {None, 443}:
+            raise ValueError("evidence sources must use the standard HTTPS port")
+        return self
+
+
 class CreateDecisionCommand(MagiModel):
     raw_question: str = Field(min_length=1, max_length=20_000)
     minimum_risk_level: RiskLevel = RiskLevel.LOW
     data_classification: DataClassification = DataClassification.INTERNAL
     evidence: tuple[SuppliedEvidenceCommand, ...] = Field(default=(), max_length=50)
+    evidence_sources: tuple[EvidenceSourceCommand, ...] = Field(
+        default=(), max_length=20
+    )
 
 
 class ConfirmDecisionCommand(MagiModel):

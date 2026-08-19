@@ -35,8 +35,9 @@ scoped by the authenticated principal.
 
 M2c-5 implements an atomic `POST /v1/decisions` create-and-prepare vertical
 slice in addition to read, confirm, run, and cancel. The command accepts a raw
-question, risk floor, data classification, and up to 50 supplied evidence
-items. It returns a `DecisionView` paused at user confirmation. Editable drafts
+question, risk floor, data classification, up to 50 supplied evidence items,
+and up to 20 authorized HTTPS `evidence_sources`. It returns a `DecisionView`
+paused at user confirmation. Editable drafts
 and the separate prepare route remain unimplemented, as do revision, list,
 report, event replay, and WebSocket handlers.
 

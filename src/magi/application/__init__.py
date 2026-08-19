@@ -1,6 +1,12 @@
 """Use cases and client-safe projections for MAGI interfaces."""
 
 from .models import DecisionView, DecisionViewProjector
+from .evidence import (
+    EvidenceRetrievalError,
+    EvidenceRetrievalGateway,
+    EvidenceSourceRequest,
+    RetrievedEvidence,
+)
 from .operations import (
     DecisionCatalog,
     DecisionCatalogEntry,
@@ -50,6 +56,10 @@ from .preparation import (
 )
 
 __all__ = [
+    "EvidenceRetrievalError",
+    "EvidenceRetrievalGateway",
+    "EvidenceSourceRequest",
+    "RetrievedEvidence",
     "DecisionCatalog",
     "DecisionCatalogEntry",
     "DecisionHistory",

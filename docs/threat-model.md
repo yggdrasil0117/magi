@@ -53,6 +53,9 @@ Trusted only after validation:
 | Over-broad API credential | Bind every subject to explicit actions and decision IDs; all-decisions access requires an explicit flag |
 | Client chooses decision or evidence identity | Derive decision ID from principal and idempotency key; assign evidence IDs in application code |
 | Client marks supplied evidence verified | Seal supplied evidence as user-asserted and calculate content hashes server-side |
+| Evidence URL reaches private infrastructure | Require exact-host allowlisting, HTTPS, public DNS and peer equality; forbid IP literals, credentials, redirects, proxies, and custom ports |
+| Evidence response exhausts resources | Bound timeout, connections, media types, charset, declared length, and streamed decoded bytes |
+| Retrieval failure leaks an upstream URL or response | Return a stable preparation error and retain details only in the exception chain |
 | Create retry duplicates work or changes normalization | Reuse a deterministic principal-scoped decision ID and validate a checkpointed preparation fingerprint before Coordinator invocation |
 | Readiness leaks infrastructure detail | Return only ready/not-ready and suppress database exception text |
 | Dependency failure receives traffic | Require the application binding and a bounded PostgreSQL probe before reporting ready |

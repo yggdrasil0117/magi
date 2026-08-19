@@ -10,6 +10,8 @@ from pydantic import Field, model_validator
 from magi.domain import DataClassification, RiskLevel
 from magi.domain.models import MagiModel
 
+from .evidence import EvidenceSourceRequest
+
 
 class DecisionPreparationFailed(RuntimeError):
     """Raised when a raw decision cannot be normalized safely."""
@@ -37,3 +39,6 @@ class DecisionPreparationRequest(MagiModel):
     minimum_risk_level: RiskLevel = RiskLevel.LOW
     data_classification: DataClassification = DataClassification.INTERNAL
     evidence: tuple[SuppliedEvidence, ...] = Field(default=(), max_length=50)
+    evidence_sources: tuple[EvidenceSourceRequest, ...] = Field(
+        default=(), max_length=20
+    )

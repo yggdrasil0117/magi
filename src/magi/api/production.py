@@ -34,7 +34,11 @@ from magi.application import (
     OperationWorker,
 )
 from magi.domain import AgentName
-from magi.infrastructure import PostgresPersistenceRuntime
+from magi.infrastructure import (
+    EvidenceGatewayPolicy,
+    HttpEvidenceGateway,
+    PostgresPersistenceRuntime,
+)
 from magi.orchestration import build_langgraph_workflow
 
 from .app import DecisionApiService, create_app
@@ -57,6 +61,9 @@ class ProductionSettings:
     postgres_min_size: int = 1
     postgres_max_size: int = 10
     model_max_attempts: int = 2
+    evidence_allowed_hosts: frozenset[str] = frozenset()
+    evidence_timeout_seconds: float = 8.0
+    evidence_max_response_bytes: int = 20_000
 
     def __post_init__(self) -> None:
         required = {
@@ -90,6 +97,16 @@ class ProductionSettings:
             raise ProductionConfigurationError(
                 "MAGI_MODEL_MAX_ATTEMPTS must be between 1 and 5"
             )
+        try:
+            EvidenceGatewayPolicy(
+                allowed_hosts=self.evidence_allowed_hosts,
+                timeout_seconds=self.evidence_timeout_seconds,
+                max_response_bytes=self.evidence_max_response_bytes,
+            )
+        except ValueError as exc:
+            raise ProductionConfigurationError(
+                "invalid evidence gateway policy"
+            ) from exc
 
     @classmethod
     def from_environment(
@@ -111,6 +128,13 @@ class ProductionSettings:
             postgres_min_size=_integer(values, "MAGI_POSTGRES_MIN_SIZE", 1),
             postgres_max_size=_integer(values, "MAGI_POSTGRES_MAX_SIZE", 10),
             model_max_attempts=_integer(values, "MAGI_MODEL_MAX_ATTEMPTS", 2),
+            evidence_allowed_hosts=_hosts(values, "MAGI_EVIDENCE_ALLOWED_HOSTS"),
+            evidence_timeout_seconds=_float(
+                values, "MAGI_EVIDENCE_TIMEOUT_SECONDS", 8.0
+            ),
+            evidence_max_response_bytes=_integer(
+                values, "MAGI_EVIDENCE_MAX_RESPONSE_BYTES", 20_000
+            ),
         )
 
 
@@ -240,8 +264,17 @@ def create_production_app(
             )
             graph = selected_graph_factory(runner, runtime.checkpointer)
             coordinator = selected_coordinator_factory(selected_settings)
+            evidence_gateway = HttpEvidenceGateway(
+                EvidenceGatewayPolicy(
+                    allowed_hosts=selected_settings.evidence_allowed_hosts,
+                    timeout_seconds=selected_settings.evidence_timeout_seconds,
+                    max_response_bytes=selected_settings.evidence_max_response_bytes,
+                )
+            )
             application_service = DecisionApplicationService(
-                graph, normalizer=coordinator
+                graph,
+                normalizer=coordinator,
+                evidence_gateway=evidence_gateway,
             )
             deferred_service.bind(application_service)
             if operation_store is not None:
@@ -331,3 +364,18 @@ def _integer(values: Mapping[str, str], name: str, default: int) -> int:
         return int(raw)
     except ValueError as exc:
         raise ProductionConfigurationError(f"{name} must be an integer") from exc
+
+
+def _float(values: Mapping[str, str], name: str, default: float) -> float:
+    raw = values.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ProductionConfigurationError(f"{name} must be a number") from exc
+
+
+def _hosts(values: Mapping[str, str], name: str) -> frozenset[str]:
+    raw = values.get(name, "")
+    return frozenset(host.strip() for host in raw.split(",") if host.strip())

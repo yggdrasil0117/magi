@@ -7,8 +7,11 @@ from .postgres import (
     PostgresOperationStore,
     decision_thread_id,
 )
+from .http_evidence import EvidenceGatewayPolicy, HttpEvidenceGateway
 
 __all__ = [
+    "EvidenceGatewayPolicy",
+    "HttpEvidenceGateway",
     "PostgresInvocationLedger",
     "PostgresCommandIdempotencyStore",
     "PostgresPersistenceRuntime",

@@ -4,11 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "magi-decision-system"
-version = "0.3.0"
+version = "0.4.0a1"
 description = "Three-perspective decision support with deterministic arbitration"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.128,<1",
+  "httpx>=0.28,<1",
   "langchain>=1.3,<2",
   "langchain-openai>=1.5,<2",
   "langgraph>=1.1,<2",
@@ -20,9 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = [
-  "httpx>=0.28,<1",
-]
+test = []
 
 [project.scripts]
 magi-report = "magi.clients.report_cli:main"
