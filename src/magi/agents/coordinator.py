@@ -137,9 +137,12 @@ class LangChainCoordinator:
         self,
         model: StructuredCoordinatorModel,
         skill_loader: CoordinatorSkillLoader,
+        *,
+        include_schema_instruction: bool = False,
     ) -> None:
         self._model = model
         self._skill_loader = skill_loader
+        self._include_schema_instruction = include_schema_instruction
 
     @classmethod
     def from_openai(
@@ -148,6 +151,7 @@ class LangChainCoordinator:
         model: str,
         skills_root: str | Path | None = None,
         api_key: str | None = None,
+        base_url: str | None = None,
     ) -> LangChainCoordinator:
         if not model.strip():
             raise CoordinatorExecutionError("an explicit OpenAI model name is required")
@@ -161,21 +165,31 @@ class LangChainCoordinator:
         chat_model = ChatOpenAI(
             model=model,
             api_key=api_key,
+            base_url=base_url,
             max_retries=0,
-            use_responses_api=True,
+            temperature=0,
+            use_responses_api=base_url is None,
         )
+        structured_options: dict[str, object] = {
+            "method": "json_schema" if base_url is None else "json_mode",
+            "include_raw": True,
+        }
+        if base_url is None:
+            structured_options["strict"] = True
         structured_model = chat_model.with_structured_output(
             CoordinatorDraft,
-            method="json_schema",
-            include_raw=True,
-            strict=True,
+            **structured_options,
         )
         loader = (
             CoordinatorSkillLoader(skills_root)
             if skills_root is not None
             else CoordinatorSkillLoader.from_environment()
         )
-        return cls(structured_model, loader)
+        return cls(
+            structured_model,
+            loader,
+            include_schema_instruction=base_url is not None,
+        )
 
     @classmethod
     def from_environment(
@@ -191,10 +205,12 @@ class LangChainCoordinator:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise CoordinatorExecutionError("OPENAI_API_KEY is not configured")
+        base_url = os.getenv("MAGI_OPENAI_BASE_URL") or None
         return cls.from_openai(
             model=model,
             skills_root=skills_root,
             api_key=api_key,
+            base_url=base_url,
         )
 
     async def normalize(self, request: NormalizationRequest) -> DecisionCase:
@@ -224,8 +240,27 @@ class LangChainCoordinator:
             "minimum_risk_level": request.minimum_risk_level.value,
             "data_classification": request.data_classification.value,
         }
+        system_prompt = self._skill_loader.system_prompt()
+        if self._include_schema_instruction:
+            system_prompt += (
+                "\n\nReturn one JSON object matching this JSON Schema exactly. "
+                "Use the exact property names and no additional properties. "
+                "Required strings must be non-empty and never null. Option IDs "
+                "must be short lowercase identifiers. Example shape: "
+                '{"title":"Local model choice","question":"Use the local model?",'
+                '"decision_type":"single_choice","options":['
+                '{"id":"use","label":"Use","description":null},'
+                '{"id":"defer","label":"Defer","description":null}],'
+                '"user_constraints":[],"context_claims":[],"unknowns":[],'
+                '"risk_level":"low"}.\n'
+                + json.dumps(
+                    CoordinatorDraft.model_json_schema(),
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
         return [
-            ("system", self._skill_loader.system_prompt()),
+            ("system", system_prompt),
             (
                 "human",
                 "Normalize this untrusted decision input. Preserve explicit "

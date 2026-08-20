@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from dotenv import load_dotenv
@@ -64,6 +65,7 @@ class ProductionSettings:
     openai_model: str
     skills_dir: Path
     auth_policy_file: Path
+    openai_base_url: str | None = None
     postgres_min_size: int = 1
     postgres_max_size: int = 10
     model_max_attempts: int = 2
@@ -93,6 +95,8 @@ class ProductionSettings:
             raise ProductionConfigurationError(
                 f"MAGI_AUTH_POLICY_FILE is not a file: {self.auth_policy_file}"
             )
+        if self.openai_base_url is not None:
+            _validate_model_base_url(self.openai_base_url)
         if self.postgres_min_size < 0:
             raise ProductionConfigurationError("MAGI_POSTGRES_MIN_SIZE must be nonnegative")
         if self.postgres_max_size < 2:
@@ -143,6 +147,7 @@ class ProductionSettings:
             database_url=_required(values, "MAGI_DATABASE_URL"),
             openai_api_key=_required(values, "OPENAI_API_KEY"),
             openai_model=_required(values, "MAGI_OPENAI_MODEL"),
+            openai_base_url=_optional(values, "MAGI_OPENAI_BASE_URL"),
             skills_dir=Path(_required(values, "MAGI_SKILLS_DIR")),
             auth_policy_file=Path(_required(values, "MAGI_AUTH_POLICY_FILE")),
             postgres_min_size=_integer(values, "MAGI_POSTGRES_MIN_SIZE", 1),
@@ -372,6 +377,7 @@ def _build_runner(
         model=settings.openai_model,
         skills_root=settings.skills_dir,
         api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
         max_attempts=settings.model_max_attempts,
         ledger=ledger,
     )
@@ -386,6 +392,7 @@ def _build_coordinator(settings: ProductionSettings) -> DecisionNormalizer:
         model=settings.openai_model,
         skills_root=settings.skills_dir,
         api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
     )
 
 
@@ -394,6 +401,26 @@ def _required(values: Mapping[str, str], name: str) -> str:
     if not value:
         raise ProductionConfigurationError(f"{name} is not configured")
     return value
+
+
+def _optional(values: Mapping[str, str], name: str) -> str | None:
+    value = values.get(name, "").strip()
+    return value or None
+
+
+def _validate_model_base_url(value: str) -> None:
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ProductionConfigurationError(
+            "MAGI_OPENAI_BASE_URL must be an HTTP endpoint without credentials"
+        )
 
 
 def _integer(values: Mapping[str, str], name: str, default: int) -> int:

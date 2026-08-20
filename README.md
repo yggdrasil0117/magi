@@ -80,6 +80,32 @@ $env:PYTHONPATH = "src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ~~~
 
+## Local Ollama / Llama 3
+
+Ollama can replace the OpenAI endpoint for local development while keeping the
+same LangChain adapter. Start Ollama, ensure `llama3:latest` is present, then set:
+
+~~~dotenv
+OPENAI_API_KEY=ollama-local
+MAGI_OPENAI_MODEL=llama3:latest
+MAGI_OPENAI_BASE_URL=http://127.0.0.1:11434/v1
+~~~
+
+The production API still requires PostgreSQL and an explicit hashed bearer
+policy. Copy `.env.example` to `.env`, configure `MAGI_DATABASE_URL`, and copy
+`config/auth-policy.example.json` to the ignored
+`config/auth-policy.json`. Start the API from PowerShell with:
+
+~~~powershell
+$env:PYTHONPATH = (Resolve-Path "src").Path
+.\.venv\Scripts\python.exe -m uvicorn magi.api.production:create_production_app --factory --host 127.0.0.1 --port 8000
+~~~
+
+Keep the Ollama endpoint bound to loopback for local-only testing. Ollama's
+OpenAI-compatible JSON mode is used automatically when
+`MAGI_OPENAI_BASE_URL` is configured; the official OpenAI structured-output
+path remains unchanged when it is omitted.
+
 ## Confirmed M0 scope
 
 - Melchior evaluates evidence, logic, feasibility, and uncertainty.

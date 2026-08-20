@@ -172,6 +172,7 @@ class LangChainPerspectiveRunner:
         ledger: InvocationLedger | None = None,
         retry_policy: RetryPolicy | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        include_schema_instruction: bool = False,
     ) -> None:
         self._models = dict(models)
         self._skill_loader = skill_loader
@@ -179,6 +180,7 @@ class LangChainPerspectiveRunner:
         self._ledger = ledger or InMemoryInvocationLedger()
         self._retry_policy = retry_policy or RetryPolicy()
         self._sleep = sleep
+        self._include_schema_instruction = include_schema_instruction
         missing = set(AgentName) - set(self._models)
         if missing:
             names = ", ".join(sorted(agent.value for agent in missing))
@@ -191,6 +193,7 @@ class LangChainPerspectiveRunner:
         model: str,
         skills_root: str | Path | None = None,
         api_key: str | None = None,
+        base_url: str | None = None,
         max_attempts: int = 2,
         ledger: InvocationLedger | None = None,
     ) -> LangChainPerspectiveRunner:
@@ -210,14 +213,20 @@ class LangChainPerspectiveRunner:
             chat_model = ChatOpenAI(
                 model=model,
                 api_key=api_key,
+                base_url=base_url,
                 max_retries=0,
-                use_responses_api=True,
+                temperature=0,
+                use_responses_api=base_url is None,
             )
+            structured_options: dict[str, object] = {
+                "method": "json_schema" if base_url is None else "json_mode",
+                "include_raw": True,
+            }
+            if base_url is None:
+                structured_options["strict"] = True
             models[agent] = chat_model.with_structured_output(
                 BallotDraft,
-                method="json_schema",
-                include_raw=True,
-                strict=True,
+                **structured_options,
             )
         loader = (
             PerspectiveSkillLoader(skills_root)
@@ -230,6 +239,7 @@ class LangChainPerspectiveRunner:
             model_name=model,
             ledger=ledger,
             retry_policy=RetryPolicy(max_attempts=max_attempts),
+            include_schema_instruction=base_url is not None,
         )
 
     @classmethod
@@ -248,10 +258,12 @@ class LangChainPerspectiveRunner:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise PerspectiveExecutionError("OPENAI_API_KEY is not configured")
+        base_url = os.getenv("MAGI_OPENAI_BASE_URL") or None
         return cls.from_openai(
             model=model,
             skills_root=skills_root,
             api_key=api_key,
+            base_url=base_url,
         )
 
     async def first_ballot(
@@ -551,8 +563,25 @@ class LangChainPerspectiveRunner:
             + "\n\nUNTRUSTED_INPUT_JSON:\n"
             + json.dumps(payload, ensure_ascii=False, indent=2)
         )
+        system_prompt = self._skill_loader.system_prompt(agent)
+        if self._include_schema_instruction:
+            system_prompt += (
+                "\n\nReturn only one ballot JSON object. Do not echo a schema, "
+                "properties, or $defs. Use exactly these fields: selected_option "
+                "(an available option ID or null), stance (support, oppose, or "
+                "abstain), confidence (0 to 1), evidence_quality (weak, medium, "
+                "or strong), rationale_summary (non-empty string array), "
+                "evidence_refs (available evidence ID array), assumptions, risks, "
+                "missing_information (string arrays), constraint_claims (array), "
+                "changed_from_previous (boolean), and review_reason (string or "
+                "null). A constraint claim, when needed, has category, statement, "
+                "severity (low, medium, high, critical), likelihood (unlikely, "
+                "possible, likely, almost_certain), causal_chain (non-empty array), "
+                "evidence_refs, and requested_action. For a first ballot, set "
+                "changed_from_previous to false and review_reason to null."
+            )
         return [
-            ("system", self._skill_loader.system_prompt(agent)),
+            ("system", system_prompt),
             ("human", human_content),
         ]
 

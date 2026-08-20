@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -20,6 +21,7 @@ from magi.api import (
     ProductionSettings,
     create_production_app,
 )
+from magi.api import production
 from magi.application import InMemoryCommandIdempotencyStore
 from magi.audit import InMemoryAuditLedger
 from magi.evaluation import InMemoryEvaluationStore
@@ -180,6 +182,40 @@ class ProductionCompositionTests(unittest.TestCase):
         self.assertEqual(runtime.open_calls, [True])
         self.assertTrue(runtime.closed)
 
+    def test_openai_compatible_endpoint_reaches_both_model_boundaries(self) -> None:
+        settings = ProductionSettings(
+            database_url=self.settings.database_url,
+            openai_api_key=self.settings.openai_api_key,
+            openai_model="llama3:latest",
+            skills_dir=self.settings.skills_dir,
+            auth_policy_file=self.settings.auth_policy_file,
+            openai_base_url="http://127.0.0.1:11434/v1",
+        )
+        ledger = InMemoryInvocationLedger()
+        with (
+            patch.object(
+                production.LangChainPerspectiveRunner,
+                "from_openai",
+                return_value="runner",
+            ) as runner,
+            patch.object(
+                production.LangChainCoordinator,
+                "from_openai",
+                return_value="coordinator",
+            ) as coordinator,
+        ):
+            self.assertEqual(production._build_runner(settings, ledger), "runner")
+            self.assertEqual(production._build_coordinator(settings), "coordinator")
+
+        self.assertEqual(
+            runner.call_args.kwargs["base_url"],
+            "http://127.0.0.1:11434/v1",
+        )
+        self.assertEqual(
+            coordinator.call_args.kwargs["base_url"],
+            "http://127.0.0.1:11434/v1",
+        )
+
     def test_settings_are_fail_closed_and_hide_secrets(self) -> None:
         with self.assertRaises(ProductionConfigurationError):
             ProductionSettings.from_mapping({})
@@ -203,6 +239,7 @@ class ProductionCompositionTests(unittest.TestCase):
             {
                 **values,
                 "MAGI_POSTGRES_MAX_SIZE": "4",
+                "MAGI_OPENAI_BASE_URL": "http://127.0.0.1:11434/v1",
                 "MAGI_EVIDENCE_ALLOWED_HOSTS": " evidence.example,docs.example ",
                 "MAGI_EVIDENCE_TIMEOUT_SECONDS": "3.5",
                 "MAGI_EVIDENCE_MAX_RESPONSE_BYTES": "12000",
@@ -215,6 +252,10 @@ class ProductionCompositionTests(unittest.TestCase):
             frozenset({"evidence.example", "docs.example"}),
         )
         self.assertEqual(configured.evidence_timeout_seconds, 3.5)
+        self.assertEqual(
+            configured.openai_base_url,
+            "http://127.0.0.1:11434/v1",
+        )
         self.assertEqual(configured.evidence_max_response_bytes, 12_000)
         self.assertEqual(
             configured.model_output_microusd_per_million_tokens,
@@ -236,5 +277,14 @@ class ProductionCompositionTests(unittest.TestCase):
                     **values,
                     "MAGI_POSTGRES_MAX_SIZE": "4",
                     "MAGI_EVIDENCE_ALLOWED_HOSTS": "*.example.com",
+                }
+            )
+
+        with self.assertRaises(ProductionConfigurationError):
+            ProductionSettings.from_mapping(
+                {
+                    **values,
+                    "MAGI_POSTGRES_MAX_SIZE": "4",
+                    "MAGI_OPENAI_BASE_URL": "http://user:secret@127.0.0.1/v1",
                 }
             )
