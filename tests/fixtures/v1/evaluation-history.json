@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "decision_id": "11111111-1111-4111-8111-111111111111",
+  "decision_version": 1,
+  "total_count": 1,
+  "evaluations": [
+    {
+      "schema_version": "1.0",
+      "evaluation_id": "6cbb86a9-0448-5736-9e63-49d8d2ae3dbc",
+      "decision_id": "11111111-1111-4111-8111-111111111111",
+      "decision_version": 1,
+      "sequence": 1,
+      "evaluation_digest": "dc4f3d9b28f40bbfb2fab9fbcb27d4666f84d57407427dcf8421cd6ac6116c06",
+      "evaluation": {
+        "schema_version": "1.0",
+        "evaluator_version": "1.0",
+        "decision_id": "11111111-1111-4111-8111-111111111111",
+        "version": 1,
+        "overall_status": "pass",
+        "citation_validity": {
+          "status": "pass",
+          "score": 1.0,
+          "reference_count": 3,
+          "valid_reference_count": 3,
+          "invalid_references": [],
+          "threshold": 1.0
+        },
+        "persona_differentiation": {
+          "status": "pass",
+          "score": 1.0,
+          "pair_count": 3,
+          "minimum_pair_distance": 1.0,
+          "identical_pairs": [],
+          "threshold": 0.35
+        },
+        "arbitration_consistency": {
+          "status": "pass",
+          "score": 1.0,
+          "consistent": true,
+          "mismatch_fields": [],
+          "rule_version": "1.0"
+        },
+        "latency": {
+          "status": "pass",
+          "sample_count": 3,
+          "mean_latency_ms": 1100,
+          "p95_latency_ms": 1200,
+          "maximum_p95_latency_ms": 2000
+        },
+        "cost": {
+          "status": "pass",
+          "priced_invocation_count": 3,
+          "input_tokens": 300,
+          "output_tokens": 150,
+          "total_cost_microusd": 600,
+          "maximum_cost_microusd": 1000,
+          "pricing_digest": "b073ad3801e49fa9ed8b12d10e5c0ea32e934cbbb433855662a8751f1df9d1d7",
+          "unpriced_models": []
+        },
+        "evaluated_at": "2026-08-18T08:00:00Z"
+      },
+      "created_at": "2026-08-20T08:00:00Z"
+    }
+  ],
+  "trend": {
+    "schema_version": "1.0",
+    "sample_count": 1,
+    "pass_count": 1,
+    "warn_count": 0,
+    "fail_count": 0,
+    "latest_status": "pass",
+    "mean_citation_score": 1.0,
+    "mean_persona_score": 1.0,
+    "mean_p95_latency_ms": 1200,
+    "mean_cost_microusd": 600
+  }
+}

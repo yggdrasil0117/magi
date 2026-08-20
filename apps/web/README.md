@@ -56,3 +56,7 @@ bounded trend summary, and append-only history window. A terminal decision may
 request a server-side evaluation; the browser submits only the decision version
 and then reloads the authoritative record. Missing operational samples remain
 explicitly labelled `未测量`, and read denial does not block the DecisionView.
+
+M5d freezes the production panel against the same versioned evaluation-history
+fixture used by TUI. Responsive, keyboard, reduced-motion, text-status, and
+same-origin acceptance remain part of the full Web regression suite.

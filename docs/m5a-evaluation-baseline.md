@@ -45,10 +45,15 @@ flag is enabled, and `2` for invalid input. The fixture under
 `tests/evals/v1/` covers all five metrics and is evaluated twice in tests to
 prove deterministic output.
 
-## Deferred to M5b+
+## Deferred from M5a and completed by M5d
 
 - Aggregate evaluation history and trend storage.
-- Live representative cases for abstention, revision, degraded runs, and
+- Representative cases for abstention, revision, degraded runs, and fail-closed
   citation failure.
 - EVA/MAGI Web and terminal metric dashboards.
-- Human review labels and calibration against expected outcomes.
+- Explicit synthetic acceptance labels and calibration against expected outcomes.
+
+History was delivered in M5b, dashboards in M5c, and the representative
+calibration plus opt-in live acceptance gate in M5d.
+Calibration against real human decisions remains a deployment/research activity
+and is not represented as completed by the synthetic local suite.

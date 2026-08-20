@@ -7,6 +7,7 @@ from pydantic import TypeAdapter
 
 from magi.application import DecisionReport
 from magi.domain import Ballot, DecisionCase, EvidenceSnapshot
+from magi.evaluation import EvaluationHistory
 
 FIXTURE_ROOT = Path(__file__).parents[1] / "fixtures" / "v1"
 
@@ -42,6 +43,14 @@ class VersionedFixtureTests(unittest.TestCase):
         self.assertEqual(report.status, "majority")
         self.assertEqual(report.minority_report.agent, "balthasar")
         self.assertEqual(len(report.review_audit), 3)
+
+    def test_evaluation_history_fixture(self) -> None:
+        history = EvaluationHistory.model_validate_json(
+            (FIXTURE_ROOT / "evaluation-history.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(history.schema_version, "1.0")
+        self.assertEqual(history.trend.pass_count, 1)
+        self.assertEqual(history.evaluations[0].evaluation.cost.total_cost_microusd, 600)
 
 
 if __name__ == "__main__":

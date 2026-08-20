@@ -140,7 +140,7 @@ criteria are satisfied; real-service deployment smoke remains environment-gated.
 
 ## M5: Clients and evaluation
 
-Status: in progress at version 0.5.0a3.
+Status: implemented and locally accepted at version 0.5.0.
 
 - Implement the confirmed UI system in TUI first, then Web and CLI automation surfaces.
 - Add history and revision views.
@@ -169,5 +169,12 @@ M5c adds matching EVA-inspired Web and terminal quality dashboards over that
 resource. Both expose the same five metrics, latest status, bounded trend window,
 total history count, and explicit not-measured states. Web runs evaluation only
 for terminal decisions and posts only the version; TUI adds `evaluations` and
-`evaluate` commands. Broader representative live suites and final M5 closure
-remain for the next increment.
+`evaluate` commands.
+
+M5d freezes explicit synthetic expectations for consensus, revision,
+insufficient information, a missing perspective, performance-budget failure,
+and invalid citation rejection. A versioned evaluation-history fixture is shared
+by Web and TUI parity tests, while a separately opted-in PostgreSQL/OpenAI test
+verifies live evaluation append, deduplication, history, pricing, and restart.
+The M5 local exit criterion is satisfied; real-service execution remains an
+explicit deployment gate when credentials and a test database are available.

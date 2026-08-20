@@ -40,4 +40,5 @@ contracts and does not import evaluation or decision-engine code.
 - TUI contract tests prove the exact GET/POST resources and version-only run body.
 - Both clients render missing latency or pricing as not measured, never zero.
 
-M5 remains open for broader representative live suites and final release closure.
+At M5c, M5 remained open for broader representative suites and release closure;
+M5d subsequently completed that calibration and local acceptance gate.

@@ -27,6 +27,9 @@ metrics as Web, including explicit `NOT MEASURED` states. It deliberately
 uses a dependency-free terminal shell so redirected/no-color behavior remains
 predictable; it never imports the decision engine.
 
+M5d cross-client acceptance renders the same validated `EvaluationHistory 1.0`
+fixture through TUI and Web, including all five values and not-measured semantics.
+
 ~~~powershell
 $env:MAGI_API_URL = "http://127.0.0.1:8000"
 $env:MAGI_API_TOKEN = "your-token"

@@ -33,3 +33,7 @@ calling the API or a model. It emits one stable JSON `DecisionEvaluation`.
 Exit code `1` means a measured quality threshold failed; invalid or oversized
 input returns `2`. Pricing is supplied in the versioned bundle and is never
 inferred from a mutable provider price page.
+
+M5d calibrates this command against a frozen representative outcome matrix. The
+matrix is synthetic and provider-neutral; the paid PostgreSQL/OpenAI acceptance
+flow remains explicitly opt-in.

@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "id": "consensus_baseline",
+      "review_label": "acceptable",
+      "decision_status": "consensus",
+      "overall_status": "pass",
+      "metrics": {
+        "citation_validity": "pass",
+        "persona_differentiation": "pass",
+        "arbitration_consistency": "pass",
+        "latency": "pass",
+        "cost": "pass"
+      }
+    },
+    {
+      "id": "cross_review_revision",
+      "review_label": "acceptable",
+      "decision_status": "majority",
+      "overall_status": "pass",
+      "metrics": {
+        "citation_validity": "pass",
+        "persona_differentiation": "pass",
+        "arbitration_consistency": "pass",
+        "latency": "pass",
+        "cost": "pass"
+      }
+    },
+    {
+      "id": "insufficient_information",
+      "review_label": "acceptable",
+      "decision_status": "insufficient_information",
+      "overall_status": "pass",
+      "metrics": {
+        "citation_validity": "pass",
+        "persona_differentiation": "pass",
+        "arbitration_consistency": "pass",
+        "latency": "pass",
+        "cost": "pass"
+      }
+    },
+    {
+      "id": "degraded_missing_persona",
+      "review_label": "advisory",
+      "decision_status": "degraded",
+      "overall_status": "warn",
+      "metrics": {
+        "citation_validity": "pass",
+        "persona_differentiation": "not_measured",
+        "arbitration_consistency": "pass",
+        "latency": "pass",
+        "cost": "pass"
+      }
+    },
+    {
+      "id": "performance_budget_failure",
+      "review_label": "reject",
+      "decision_status": "consensus",
+      "overall_status": "fail",
+      "metrics": {
+        "citation_validity": "pass",
+        "persona_differentiation": "pass",
+        "arbitration_consistency": "pass",
+        "latency": "fail",
+        "cost": "fail"
+      }
+    },
+    {
+      "id": "invalid_citation_rejected",
+      "review_label": "reject",
+      "expected_error": "protocol_violation"
+    }
+  ]
+}

@@ -66,6 +66,11 @@ M5c advances to version 0.5.0a3 with matching EVA-inspired Web and terminal
 evaluation dashboards. Both render the same five authoritative metrics and
 bounded history; neither client accepts or recalculates scores.
 
+M5d closes M5 at version 0.5.0 with a frozen representative quality matrix,
+one shared Web/TUI evaluation-history fixture, cross-client semantic parity,
+and an opt-in PostgreSQL/OpenAI evaluation acceptance flow. Local implementation
+acceptance passes; paid real-service execution remains explicitly environment-gated.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -116,6 +121,7 @@ The M5a evaluation baseline is documented in docs/m5a-evaluation-baseline.md.
 M5b evaluation history and API composition are documented in
 docs/m5b-evaluation-history.md.
 M5c Web/TUI evaluation parity is documented in docs/m5c-evaluation-ui.md.
+M5 acceptance closure is documented in docs/m5d-acceptance-closure.md.
 The cross-cutting Web/TUI interface plan is documented in docs/ui-design-plan.md.
 The accepted UI-D1 journeys and information architecture are documented in
 docs/ui-d1-information-architecture.md.
