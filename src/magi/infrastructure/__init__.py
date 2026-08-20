@@ -9,6 +9,7 @@ from .postgres import (
 )
 from .http_evidence import EvidenceGatewayPolicy, HttpEvidenceGateway
 from .postgres_audit import PostgresAuditLedger
+from .postgres_evaluation import PostgresEvaluationStore
 
 __all__ = [
     "EvidenceGatewayPolicy",
@@ -18,5 +19,6 @@ __all__ = [
     "PostgresCommandIdempotencyStore",
     "PostgresPersistenceRuntime",
     "PostgresOperationStore",
+    "PostgresEvaluationStore",
     "decision_thread_id",
 ]

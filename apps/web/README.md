@@ -50,3 +50,7 @@ headers.
 
 Authorized inbox, history, and revision comparison are implemented through dedicated
 principal-scoped API projections.
+
+M5b allowlists the exact evaluation history/run resource through the loopback
+proxy. No metric is calculated in the browser; the EVA-style evaluation panel
+will consume this server-authoritative resource in M5c.

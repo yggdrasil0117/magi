@@ -80,6 +80,27 @@ class WorkflowCliTests(unittest.TestCase):
         )
         self.assertTrue(any("verified" in line for line in output))
 
+    def test_evaluation_commands_use_server_authoritative_contracts(self) -> None:
+        decision_id = UUID("11111111-1111-4111-8111-111111111111")
+        with patch.object(workflow_cli, "request_json", return_value={}) as request:
+            with redirect_stdout(io.StringIO()):
+                workflow_cli.main([
+                    "evaluations", str(decision_id),
+                    "--version", "2", "--limit", "8",
+                ])
+                workflow_cli.main(["evaluate", str(decision_id), "--version", "2"])
+
+        history_call, run_call = request.call_args_list
+        self.assertEqual(
+            history_call.args,
+            ("GET", f"/v1/decisions/{decision_id}/evaluations?version=2&limit=8"),
+        )
+        self.assertEqual(
+            run_call.args,
+            ("POST", f"/v1/decisions/{decision_id}/evaluations"),
+        )
+        self.assertEqual(run_call.kwargs["body"], {"version": 2})
+
 
 if __name__ == "__main__":
     unittest.main()

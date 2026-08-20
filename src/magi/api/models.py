@@ -65,6 +65,10 @@ class RunDecisionCommand(MagiModel):
     version: int = Field(default=1, ge=1)
 
 
+class RunEvaluationCommand(MagiModel):
+    version: int = Field(default=1, ge=1)
+
+
 class CancelDecisionCommand(MagiModel):
     version: int = Field(default=1, ge=1)
     reason: str | None = Field(default=None, max_length=2000)

@@ -44,6 +44,8 @@ DecisionAction = Literal[
     "decision:cancel",
     "audit:read",
     "audit:redact",
+    "evaluation:read",
+    "evaluation:run",
 ]
 
 

@@ -294,15 +294,7 @@ class DecisionAuditService:
     async def reconstruct_report(
         self, decision_id: UUID, decision_version: int
     ) -> DecisionReport:
-        records = await self._verified_records(decision_id, decision_version)
-        states = [
-            AuditDecisionState.model_validate(record.payload)
-            for record in records
-            if record.kind == "decision_state"
-        ]
-        terminal = next((state for state in reversed(states) if state.result is not None), None)
-        if terminal is None:
-            raise DecisionReportNotReady("audit chain has no arbitration result")
+        terminal = await self.reconstruct_state(decision_id, decision_version)
         final_ballots = terminal.review_ballots or terminal.first_ballots
         return self._report_projector.project(
             terminal.case,
@@ -310,6 +302,22 @@ class DecisionAuditService:
             terminal.first_ballots,
             final_ballots,
         )
+
+    async def reconstruct_state(
+        self, decision_id: UUID, decision_version: int
+    ) -> AuditDecisionState:
+        records = await self._verified_records(decision_id, decision_version)
+        states = [
+            AuditDecisionState.model_validate(record.payload)
+            for record in records
+            if record.kind == "decision_state"
+        ]
+        terminal = next(
+            (state for state in reversed(states) if state.result is not None), None
+        )
+        if terminal is None:
+            raise DecisionReportNotReady("audit chain has no arbitration result")
+        return terminal
 
     async def visible_records(
         self, decision_id: UUID, decision_version: int

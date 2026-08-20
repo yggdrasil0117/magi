@@ -11,7 +11,9 @@
         "decision:run",
         "decision:cancel",
         "audit:read",
-        "audit:redact"
+        "audit:redact",
+        "evaluation:read",
+        "evaluation:run"
       ],
       "decision_ids": [],
       "allow_all_decisions": true

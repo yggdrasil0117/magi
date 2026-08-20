@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 from enum import StrEnum
@@ -88,11 +90,13 @@ class CostMetric(MagiModel):
     output_tokens: int = Field(ge=0)
     total_cost_microusd: int | None = Field(default=None, ge=0)
     maximum_cost_microusd: int | None = Field(default=None, ge=0)
+    pricing_digest: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     unpriced_models: tuple[str, ...] = ()
 
 
 class DecisionEvaluation(MagiModel):
     schema_version: Literal["1.0"] = "1.0"
+    evaluator_version: Literal["1.0"] = "1.0"
     decision_id: UUID
     version: int = Field(ge=1)
     overall_status: MetricStatus
@@ -316,6 +320,7 @@ class DecisionEvaluator:
         input_tokens = sum(record.usage.input_tokens for record in attempts)
         output_tokens = sum(record.usage.output_tokens for record in attempts)
         prices = {rate.model_name: rate for rate in bundle.pricing}
+        pricing_digest = _pricing_digest(bundle.pricing)
         unpriced = tuple(sorted({record.model_name for record in attempts} - prices.keys()))
         if not attempts or unpriced:
             return CostMetric(
@@ -324,6 +329,7 @@ class DecisionEvaluator:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 maximum_cost_microusd=bundle.thresholds.maximum_cost_microusd,
+                pricing_digest=pricing_digest,
                 unpriced_models=unpriced,
             )
         numerator = sum(
@@ -346,6 +352,7 @@ class DecisionEvaluator:
             output_tokens=output_tokens,
             total_cost_microusd=total,
             maximum_cost_microusd=maximum,
+            pricing_digest=pricing_digest,
         )
 
 
@@ -358,3 +365,17 @@ def _ballot_features(ballot: Ballot) -> set[str]:
         *(claim.statement for claim in ballot.constraint_claims),
     )
     return {" ".join(value.casefold().split()) for value in values if value.strip()}
+
+
+def _pricing_digest(pricing: Sequence[ModelPricing]) -> str | None:
+    if not pricing:
+        return None
+    material = json.dumps(
+        [
+            rate.model_dump(mode="json")
+            for rate in sorted(pricing, key=lambda item: item.model_name)
+        ],
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()

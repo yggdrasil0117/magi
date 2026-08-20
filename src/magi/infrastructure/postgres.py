@@ -24,6 +24,7 @@ from magi.agents.invocation import (
     InvocationLedger,
     InvocationStatus,
     ModelInvocationRecord,
+    ModelTokenUsage,
 )
 from magi.application import (
     DecisionCatalog,
@@ -49,6 +50,7 @@ from magi.domain import DataClassification, ProtocolViolation
 from magi.orchestration import decision_thread_id
 
 from .postgres_audit import PostgresAuditLedger
+from .postgres_evaluation import PostgresEvaluationStore
 
 
 INVOCATION_SCHEMA = (
@@ -266,6 +268,21 @@ class PostgresInvocationLedger(InvocationLedger):
                             Jsonb(dict(ballot)),
                         ),
                     )
+
+    async def records_for(
+        self, decision_id: UUID, decision_version: int
+    ) -> tuple[ModelInvocationRecord, ...]:
+        async with self._connection() as connection:
+            cursor = await connection.execute(
+                """
+                SELECT * FROM magi_model_invocations
+                WHERE decision_id = %s AND decision_version = %s
+                ORDER BY started_at ASC, invocation_id ASC
+                """,
+                (decision_id, decision_version),
+            )
+            rows = await cursor.fetchall()
+        return tuple(_invocation_record(row) for row in rows)
 
     @asynccontextmanager
     async def _connection(self) -> AsyncIterator[Any]:
@@ -905,6 +922,7 @@ class PostgresPersistenceRuntime:
         self.command_idempotency_store = PostgresCommandIdempotencyStore(self.pool)
         self.operation_store = PostgresOperationStore(self.pool)
         self.audit_ledger = PostgresAuditLedger(self.pool)
+        self.evaluation_store = PostgresEvaluationStore(self.pool)
         self._checkpointer: AsyncPostgresSaver | None = None
         self._opened = False
 
@@ -933,6 +951,7 @@ class PostgresPersistenceRuntime:
                 await self.command_idempotency_store.setup()
                 await self.operation_store.setup()
                 await self.audit_ledger.setup()
+                await self.evaluation_store.setup()
                 await self._checkpointer.setup()
         except Exception:
             self._checkpointer = None
@@ -1089,3 +1108,30 @@ def _record_parameters(record: ModelInvocationRecord) -> tuple[object, ...]:
         record.usage.total_tokens,
         record.error_type,
     )
+
+
+def _invocation_record(row: Mapping[str, Any]) -> ModelInvocationRecord:
+    try:
+        return ModelInvocationRecord(
+            invocation_id=row["invocation_id"],
+            idempotency_key=row["idempotency_key"],
+            prompt_digest=row["prompt_digest"],
+            decision_id=row["decision_id"],
+            decision_version=row["decision_version"],
+            agent=row["agent"],
+            round=row["round"],
+            attempt=row["attempt"],
+            status=row["status"],
+            model_name=row["model_name"],
+            started_at=row["started_at"],
+            completed_at=row["completed_at"],
+            latency_ms=row["latency_ms"],
+            usage=ModelTokenUsage(
+                input_tokens=row["input_tokens"],
+                output_tokens=row["output_tokens"],
+                total_tokens=row["total_tokens"],
+            ),
+            error_type=row["error_type"],
+        )
+    except (KeyError, ValidationError, ValueError) as exc:
+        raise ProtocolViolation("persisted invocation record is invalid") from exc

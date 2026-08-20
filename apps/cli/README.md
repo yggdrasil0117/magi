@@ -8,6 +8,8 @@ magi inbox [--limit N]
 magi get DECISION_ID [--version N]
 magi history DECISION_ID
 magi audit DECISION_ID [--version N]
+magi evaluations DECISION_ID [--version N] [--limit N]
+magi evaluate DECISION_ID [--version N]
 magi create QUESTION [--risk LEVEL] [--classification CLASS]
 magi confirm DECISION_ID --at ISO_TIMESTAMP [--version N]
 magi run DECISION_ID [--version N]

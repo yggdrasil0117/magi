@@ -36,3 +36,8 @@ M2c-6 adds database-aware readiness. `/healthz` reports only that the process is
 alive. `/readyz` returns 200 only after the application service is bound and the
 shared PostgreSQL runtime completes a bounded probe; otherwise it returns a
 sanitized 503 response.
+
+M5b adds `GET` and `POST /v1/decisions/{decision_id}/evaluations`. The POST
+accepts only a version and rebuilds all metric inputs from server-owned audit and
+invocation records. History is append-only, exact-result retries are deduplicated,
+and reading/running use separate authorization actions.

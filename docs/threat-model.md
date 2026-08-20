@@ -63,6 +63,11 @@ Trusted only after validation:
 | Decision reader gains sensitive audit access | Require separate `audit:read` permission rather than inheriting `decision:read` |
 | Client forges redaction actor or time | Derive actor, command identity, and timestamp at the authenticated API boundary |
 | Audit UI becomes a generic API proxy | Allowlist exact audit paths, query keys, methods, and bounded bodies in the loopback proxy |
+| Client fabricates a favorable evaluation | Reconstruct all quality inputs from the verified audit chain and invocation ledger; accept only a decision version |
+| Evaluation result is overwritten or deleted | Store append-only rows and reject PostgreSQL UPDATE/DELETE with a trigger |
+| Evaluation retry inflates history | Derive a stable digest and UUID from the complete evaluation and return the existing row |
+| Mutable vendor pricing rewrites old cost | Require an explicit server price snapshot and persist the resulting immutable evaluation |
+| Ordinary decision reader gains quality telemetry | Require separate `evaluation:read` and `evaluation:run` actions |
 | Create retry duplicates work or changes normalization | Reuse a deterministic principal-scoped decision ID and validate a checkpointed preparation fingerprint before Coordinator invocation |
 | Readiness leaks infrastructure detail | Return only ready/not-ready and suppress database exception text |
 | Dependency failure receives traffic | Require the application binding and a bounded PostgreSQL probe before reporting ready |

@@ -22,6 +22,7 @@ from magi.api import (
 )
 from magi.application import InMemoryCommandIdempotencyStore
 from magi.audit import InMemoryAuditLedger
+from magi.evaluation import InMemoryEvaluationStore
 from tests.fixtures.factories import DECISION_ID
 
 
@@ -33,6 +34,7 @@ class FakeRuntime:
         self.invocation_ledger = InMemoryInvocationLedger()
         self.command_idempotency_store = InMemoryCommandIdempotencyStore()
         self.audit_ledger = InMemoryAuditLedger()
+        self.evaluation_store = InMemoryEvaluationStore()
         self._checkpointer = object()
         self.open_calls: list[bool] = []
         self.closed = False
@@ -84,7 +86,7 @@ class ProductionCompositionTests(unittest.TestCase):
                 HashedBearerCredential(
                     token_sha256=hashlib.sha256(TOKEN.encode("utf-8")).hexdigest(),
                     subject="operator-1",
-                    actions=frozenset({"decision:read"}),
+                    actions=frozenset({"decision:read", "evaluation:read"}),
                     allow_all_decisions=True,
                 ),
             )
@@ -144,6 +146,12 @@ class ProductionCompositionTests(unittest.TestCase):
                 headers={"Authorization": f"Bearer {TOKEN}"},
             )
             self.assertEqual(response.status_code, 404)
+            evaluations = client.get(
+                f"/v1/decisions/{DECISION_ID}/evaluations",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+            )
+            self.assertEqual(evaluations.status_code, 200)
+            self.assertEqual(evaluations.json()["total_count"], 0)
 
         self.assertTrue(runtime.closed)
         self.assertEqual(runtime.readiness_timeouts, [2.0, 2.0])
@@ -198,6 +206,8 @@ class ProductionCompositionTests(unittest.TestCase):
                 "MAGI_EVIDENCE_ALLOWED_HOSTS": " evidence.example,docs.example ",
                 "MAGI_EVIDENCE_TIMEOUT_SECONDS": "3.5",
                 "MAGI_EVIDENCE_MAX_RESPONSE_BYTES": "12000",
+                "MAGI_MODEL_INPUT_MICROUSD_PER_MILLION_TOKENS": "1000000",
+                "MAGI_MODEL_OUTPUT_MICROUSD_PER_MILLION_TOKENS": "2000000",
             }
         )
         self.assertEqual(
@@ -206,6 +216,19 @@ class ProductionCompositionTests(unittest.TestCase):
         )
         self.assertEqual(configured.evidence_timeout_seconds, 3.5)
         self.assertEqual(configured.evidence_max_response_bytes, 12_000)
+        self.assertEqual(
+            configured.model_output_microusd_per_million_tokens,
+            2_000_000,
+        )
+
+        with self.assertRaises(ProductionConfigurationError):
+            ProductionSettings.from_mapping(
+                {
+                    **values,
+                    "MAGI_POSTGRES_MAX_SIZE": "4",
+                    "MAGI_MODEL_INPUT_MICROUSD_PER_MILLION_TOKENS": "1000000",
+                }
+            )
 
         with self.assertRaises(ProductionConfigurationError):
             ProductionSettings.from_mapping(

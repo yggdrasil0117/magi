@@ -6,6 +6,7 @@ import asyncio
 import unittest
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -32,8 +33,15 @@ from magi.infrastructure import (
     PostgresCommandIdempotencyStore,
     PostgresInvocationLedger,
     PostgresOperationStore,
+    PostgresEvaluationStore,
     PostgresPersistenceRuntime,
     decision_thread_id,
+)
+from magi.evaluation import (
+    DecisionEvaluator,
+    EvaluationBundle,
+    EvaluationRecord,
+    build_evaluation_record,
 )
 from tests.fixtures.factories import make_ballot, make_case, make_snapshot
 
@@ -73,11 +81,17 @@ class FakeConnection:
         command_row: dict[str, object] | None = None,
         operation_row: dict[str, object] | None = None,
         event_rows: list[dict[str, object]] | None = None,
+        invocation_rows: list[dict[str, object]] | None = None,
+        evaluation_row: dict[str, object] | None = None,
+        evaluation_rows: list[dict[str, object]] | None = None,
     ) -> None:
         self.ballot = ballot
         self.command_row = command_row
         self.operation_row = operation_row
         self.event_rows = event_rows or []
+        self.invocation_rows = invocation_rows or []
+        self.evaluation_row = evaluation_row
+        self.evaluation_rows = evaluation_rows or []
         self.calls: list[tuple[str, object | None]] = []
         self.transactions = 0
 
@@ -96,6 +110,24 @@ class FakeConnection:
             return FakeCursor({"exists": 1} if self.command_row is not None else None)
         if normalized.startswith("SELECT operation_id, sequence, event_type"):
             return FakeCursor(rows=self.event_rows)
+        if normalized.startswith("SELECT * FROM magi_model_invocations"):
+            return FakeCursor(rows=self.invocation_rows)
+        if normalized.startswith(
+            "SELECT * FROM magi_decision_evaluations WHERE evaluation_id"
+        ):
+            return FakeCursor(self.evaluation_row)
+        if normalized.startswith(
+            "SELECT sequence FROM magi_decision_evaluations"
+        ):
+            return FakeCursor()
+        if normalized.startswith("SELECT *, COUNT(*) OVER() AS total_count"):
+            rows = [
+                {**row, "total_count": len(self.evaluation_rows)}
+                for row in self.evaluation_rows
+            ]
+            return FakeCursor(rows=rows)
+        if normalized.startswith("SELECT * FROM magi_decision_evaluations"):
+            return FakeCursor(rows=self.evaluation_rows)
         return FakeCursor()
 
     def transaction(self) -> AsyncContext:
@@ -204,6 +236,26 @@ def operation_event(sequence: int) -> dict[str, object]:
 
 
 class PostgresInvocationLedgerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_records_for_returns_validated_decision_attempts(self) -> None:
+        record = invocation_record()
+        row = {
+            **record.model_dump(exclude={"usage"}),
+            "agent": record.agent.value,
+            "status": record.status.value,
+            "input_tokens": record.usage.input_tokens,
+            "output_tokens": record.usage.output_tokens,
+            "total_tokens": record.usage.total_tokens,
+        }
+        connection = FakeConnection({}, invocation_rows=[row])
+        ledger = PostgresInvocationLedger(FakePool(connection))  # type: ignore[arg-type]
+
+        records = await ledger.records_for(record.decision_id, record.decision_version)
+
+        self.assertEqual(records, (record,))
+        self.assertTrue(
+            any("SELECT * FROM magi_model_invocations" in query for query, _ in connection.calls)
+        )
+
     async def test_guard_reuses_one_connection_for_read_and_atomic_append(self) -> None:
         case = make_case()
         ballot = make_ballot(case, AgentName.MELCHIOR, "release").model_dump(mode="json")
@@ -282,6 +334,82 @@ class PostgresAuditLedgerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("INSERT INTO magi_decision_audit" in query for query in queries))
         self.assertEqual(record.sequence, 1)
         self.assertEqual(record.previous_hash, "0" * 64)
+
+
+class PostgresEvaluationStoreTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def evaluation_record() -> EvaluationRecord:
+        bundle = EvaluationBundle.model_validate_json(
+            Path("tests/evals/v1/consensus-baseline.json").read_text(encoding="utf-8")
+        )
+        evaluation = DecisionEvaluator().evaluate(bundle)
+        return build_evaluation_record(
+            evaluation, sequence=1, created_at=OPERATION_TIME
+        )
+
+    async def test_setup_and_append_are_transactional_and_append_only(self) -> None:
+        bundle = EvaluationBundle.model_validate_json(
+            Path("tests/evals/v1/consensus-baseline.json").read_text(encoding="utf-8")
+        )
+        evaluation = DecisionEvaluator().evaluate(bundle)
+        connection = FakeConnection({})
+        store = PostgresEvaluationStore(
+            FakePool(connection)  # type: ignore[arg-type]
+        )
+
+        await store.setup()
+        record = await store.append(evaluation, created_at=OPERATION_TIME)
+
+        queries = tuple(query for query, _ in connection.calls)
+        self.assertTrue(
+            any(
+                "CREATE TABLE IF NOT EXISTS magi_decision_evaluations" in query
+                for query in queries
+            )
+        )
+        self.assertTrue(any("BEFORE UPDATE OR DELETE" in query for query in queries))
+        self.assertTrue(any("pg_advisory_xact_lock" in query for query in queries))
+        self.assertTrue(
+            any("INSERT INTO magi_decision_evaluations" in query for query in queries)
+        )
+        self.assertEqual(record.sequence, 1)
+
+    async def test_history_validates_persisted_evaluation_envelopes(self) -> None:
+        record = self.evaluation_record()
+        evaluation = record.evaluation
+        row = {
+            **record.model_dump(exclude={"evaluation"}),
+            "evaluation": evaluation.model_dump(mode="json"),
+        }
+        connection = FakeConnection({}, evaluation_rows=[row])
+        store = PostgresEvaluationStore(
+            FakePool(connection)  # type: ignore[arg-type]
+        )
+
+        history = await store.history(
+            evaluation.decision_id, evaluation.version, limit=20
+        )
+
+        self.assertEqual(history.evaluations, (record,))
+        self.assertEqual(history.trend.pass_count, 1)
+
+    async def test_exact_evaluation_retry_returns_existing_row(self) -> None:
+        record = self.evaluation_record()
+        row = {
+            **record.model_dump(exclude={"evaluation"}),
+            "evaluation": record.evaluation.model_dump(mode="json"),
+        }
+        connection = FakeConnection({}, evaluation_row=row)
+        store = PostgresEvaluationStore(
+            FakePool(connection)  # type: ignore[arg-type]
+        )
+
+        replay = await store.append(record.evaluation, created_at=OPERATION_TIME)
+
+        self.assertEqual(replay, record)
+        self.assertFalse(
+            any("INSERT INTO magi_decision_evaluations" in query for query, _ in connection.calls)
+        )
 
 
 class PostgresReadinessTests(unittest.IsolatedAsyncioTestCase):

@@ -1,6 +1,12 @@
 """FastAPI adapter and transport-level contracts."""
 
-from .app import AuditApiService, DecisionApiService, ReadinessProbe, create_app
+from .app import (
+    AuditApiService,
+    DecisionApiService,
+    EvaluationApiService,
+    ReadinessProbe,
+    create_app,
+)
 from .auth import (
     ApiAuthenticationError,
     ApiAuthorizationError,
@@ -19,6 +25,7 @@ from .models import (
     EvidenceSourceCommand,
     RedactAuditCommand,
     RunDecisionCommand,
+    RunEvaluationCommand,
     SuppliedEvidenceCommand,
 )
 from .production import (
@@ -38,6 +45,7 @@ __all__ = [
     "ConfirmDecisionCommand",
     "CreateDecisionCommand",
     "DecisionApiService",
+    "EvaluationApiService",
     "DecisionAuthorizer",
     "EvidenceSourceCommand",
     "HashedBearerAuthorizer",
@@ -48,6 +56,7 @@ __all__ = [
     "ReadinessProbe",
     "RedactAuditCommand",
     "RunDecisionCommand",
+    "RunEvaluationCommand",
     "SuppliedEvidenceCommand",
     "create_app",
     "create_production_app",

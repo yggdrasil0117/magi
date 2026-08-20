@@ -9,6 +9,7 @@ test("proxy allows only versioned decision reads and JSON reports", () => {
   assert.equal(isAllowedDecisionApiPath(`/api/v1/decisions/${id}`), true);
   assert.equal(isAllowedDecisionApiPath(`/api/v1/decisions/${id}/report`), true);
   assert.equal(isAllowedDecisionApiPath(`/api/v1/decisions/${id}/audit`), true);
+  assert.equal(isAllowedDecisionApiPath(`/api/v1/decisions/${id}/evaluations`), true);
   assert.equal(isAllowedDecisionApiPath(`/api/v1/decisions/${id}/confirm`), false);
   assert.equal(isAllowedDecisionApiPath("/api/v1/decisions/not-a-uuid"), false);
   assert.equal(isAllowedDecisionApiPath(`/api/v1/decisions/${id}/report.md`), false);
@@ -37,6 +38,7 @@ test("proxy permits accepted commands and operation replay only", () => {
   assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/run`), true);
   assert.equal(isAllowedApiOperation("POST", "/api/v1/decisions"), true);
   assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/audit/redactions`), true);
+  assert.equal(isAllowedApiOperation("POST", `/api/v1/decisions/${id}/evaluations`), true);
   assert.equal(isAllowedApiOperation("GET", `/api/v1/operations/${id}`), true);
   assert.equal(isAllowedApiOperation("GET", `/api/v1/operations/${id}/events`), true);
   assert.equal(isAllowedApiOperation("GET", "/api/v1/operations"), true);
@@ -50,6 +52,18 @@ test("proxy permits accepted commands and operation replay only", () => {
   assert.throws(
     () => upstreamPath(new URL(`/api/v1/decisions/${id}/cancel?version=1`, "http://localhost"), "POST"),
     /query|Mutation/,
+  );
+  assert.equal(
+    upstreamPath(
+      new URL(`/api/v1/decisions/${id}/evaluations?version=2&limit=20`, "http://localhost"),
+    ),
+    `/v1/decisions/${id}/evaluations?version=2&limit=20`,
+  );
+  assert.throws(
+    () => upstreamPath(
+      new URL(`/api/v1/decisions/${id}/evaluations?limit=101`, "http://localhost"),
+    ),
+    /limit/,
   );
   assert.equal(
     upstreamPath(new URL(`/api/v1/operations/${id}/events?after=2&limit=100`, "http://localhost")),

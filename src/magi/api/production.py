@@ -35,6 +35,11 @@ from magi.application import (
 )
 from magi.audit import AuditLedger, DecisionAuditService
 from magi.domain import AgentName
+from magi.evaluation import (
+    DecisionEvaluationService,
+    EvaluationStore,
+    ModelPricing,
+)
 from magi.infrastructure import (
     EvidenceGatewayPolicy,
     HttpEvidenceGateway,
@@ -65,6 +70,8 @@ class ProductionSettings:
     evidence_allowed_hosts: frozenset[str] = frozenset()
     evidence_timeout_seconds: float = 8.0
     evidence_max_response_bytes: int = 20_000
+    model_input_microusd_per_million_tokens: int | None = None
+    model_output_microusd_per_million_tokens: int | None = None
 
     def __post_init__(self) -> None:
         required = {
@@ -97,6 +104,18 @@ class ProductionSettings:
         if not 1 <= self.model_max_attempts <= 5:
             raise ProductionConfigurationError(
                 "MAGI_MODEL_MAX_ATTEMPTS must be between 1 and 5"
+            )
+        prices = (
+            self.model_input_microusd_per_million_tokens,
+            self.model_output_microusd_per_million_tokens,
+        )
+        if (prices[0] is None) != (prices[1] is None):
+            raise ProductionConfigurationError(
+                "model input and output evaluation prices must be configured together"
+            )
+        if any(value is not None and value < 0 for value in prices):
+            raise ProductionConfigurationError(
+                "model evaluation prices must be nonnegative"
             )
         try:
             EvidenceGatewayPolicy(
@@ -136,6 +155,12 @@ class ProductionSettings:
             evidence_max_response_bytes=_integer(
                 values, "MAGI_EVIDENCE_MAX_RESPONSE_BYTES", 20_000
             ),
+            model_input_microusd_per_million_tokens=_optional_integer(
+                values, "MAGI_MODEL_INPUT_MICROUSD_PER_MILLION_TOKENS"
+            ),
+            model_output_microusd_per_million_tokens=_optional_integer(
+                values, "MAGI_MODEL_OUTPUT_MICROUSD_PER_MILLION_TOKENS"
+            ),
         )
 
 
@@ -144,6 +169,7 @@ class ProductionPersistence(Protocol):
     command_idempotency_store: CommandIdempotencyStore
     operation_store: OperationStore
     audit_ledger: AuditLedger
+    evaluation_store: EvaluationStore
 
     @property
     def checkpointer(self) -> Any: ...
@@ -252,7 +278,15 @@ def create_production_app(
     selected_coordinator_factory = coordinator_factory or _build_coordinator
     runtime = selected_runtime_factory(selected_settings)
     operation_store = getattr(runtime, "operation_store", None)
+    evaluation_store = runtime.evaluation_store
     audit_service = DecisionAuditService(runtime.audit_ledger)
+    pricing = _evaluation_pricing(selected_settings)
+    evaluation_service = DecisionEvaluationService(
+        audit_service,
+        runtime.invocation_ledger,
+        evaluation_store,
+        pricing=pricing,
+    )
     deferred_service = _DeferredDecisionService()
     readiness_probe = _ProductionReadinessProbe(runtime, deferred_service)
 
@@ -306,6 +340,7 @@ def create_production_app(
         idempotency_store=runtime.command_idempotency_store,
         operation_store=operation_store,
         audit_service=audit_service,
+        evaluation_service=evaluation_service,
         lifespan=lifespan,
         readiness_probe=readiness_probe,
     )
@@ -379,6 +414,30 @@ def _float(values: Mapping[str, str], name: str, default: float) -> float:
         return float(raw)
     except ValueError as exc:
         raise ProductionConfigurationError(f"{name} must be a number") from exc
+
+
+def _optional_integer(values: Mapping[str, str], name: str) -> int | None:
+    raw = values.get(name)
+    if raw is None or not raw.strip():
+        return None
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ProductionConfigurationError(f"{name} must be an integer") from exc
+
+
+def _evaluation_pricing(settings: ProductionSettings) -> tuple[ModelPricing, ...]:
+    input_price = settings.model_input_microusd_per_million_tokens
+    output_price = settings.model_output_microusd_per_million_tokens
+    if input_price is None or output_price is None:
+        return ()
+    return (
+        ModelPricing(
+            model_name=settings.openai_model,
+            input_microusd_per_million_tokens=input_price,
+            output_microusd_per_million_tokens=output_price,
+        ),
+    )
 
 
 def _hosts(values: Mapping[str, str], name: str) -> frozenset[str]:

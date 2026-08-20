@@ -82,6 +82,10 @@ class InvocationLedger(Protocol):
         ballot: Mapping[str, Any] | None = None,
     ) -> None: ...
 
+    async def records_for(
+        self, decision_id: UUID, decision_version: int
+    ) -> tuple[ModelInvocationRecord, ...]: ...
+
 
 class InMemoryInvocationLedger:
     """Process-local append-only ledger for tests and development."""
@@ -115,6 +119,16 @@ class InMemoryInvocationLedger:
             if record.status is not InvocationStatus.SUCCEEDED:
                 raise ValueError("only successful invocations may store a ballot")
             self._ballots.setdefault(record.idempotency_key, deepcopy(dict(ballot)))
+
+    async def records_for(
+        self, decision_id: UUID, decision_version: int
+    ) -> tuple[ModelInvocationRecord, ...]:
+        return tuple(
+            record
+            for record in self._records
+            if record.decision_id == decision_id
+            and record.decision_version == decision_version
+        )
 
 
 class RetryPolicy(MagiModel):

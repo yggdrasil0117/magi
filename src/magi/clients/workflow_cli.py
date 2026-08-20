@@ -76,6 +76,13 @@ def build_parser() -> argparse.ArgumentParser:
     audit = sub.add_parser("audit")
     audit.add_argument("decision_id", type=UUID)
     audit.add_argument("--version", type=_bounded_positive, default=1)
+    evaluations = sub.add_parser("evaluations")
+    evaluations.add_argument("decision_id", type=UUID)
+    evaluations.add_argument("--version", type=_bounded_positive, default=1)
+    evaluations.add_argument("--limit", type=_bounded_positive, default=20)
+    evaluate = sub.add_parser("evaluate")
+    evaluate.add_argument("decision_id", type=UUID)
+    evaluate.add_argument("--version", type=_bounded_positive, default=1)
     create = sub.add_parser("create")
     create.add_argument("question")
     create.add_argument("--risk", choices=("low", "medium", "high", "critical"), default="low")
@@ -121,6 +128,18 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "audit":
         return request_json(
             "GET", f"/v1/decisions/{args.decision_id}/audit?version={args.version}"
+        )
+    if args.command == "evaluations":
+        return request_json(
+            "GET",
+            f"/v1/decisions/{args.decision_id}/evaluations"
+            f"?version={args.version}&limit={args.limit}",
+        )
+    if args.command == "evaluate":
+        return request_json(
+            "POST",
+            f"/v1/decisions/{args.decision_id}/evaluations",
+            body={"version": args.version},
         )
     if args.command == "create":
         return request_json("POST", "/v1/decisions", body={

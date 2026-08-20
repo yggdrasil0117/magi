@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
@@ -41,6 +42,11 @@ from magi.audit import (
     AuditRedaction,
     DecisionAuditTrail,
     InMemoryAuditLedger,
+)
+from magi.evaluation import (
+    DecisionEvaluator,
+    EvaluationBundle,
+    InMemoryEvaluationStore,
 )
 from magi.orchestration import build_langgraph_workflow
 from tests.fixtures.factories import (
@@ -173,6 +179,29 @@ class FakeAuditService:
         )
 
 
+class FakeEvaluationService:
+    def __init__(self) -> None:
+        bundle = EvaluationBundle.model_validate_json(
+            Path("tests/evals/v1/consensus-baseline.json").read_text(encoding="utf-8")
+        )
+        self.evaluation = DecisionEvaluator().evaluate(bundle)
+        self.store = InMemoryEvaluationStore()
+        self.run_calls: list[tuple[UUID, int]] = []
+        self.history_calls: list[tuple[UUID, int, int]] = []
+
+    async def run(self, decision_id: UUID, decision_version: int):
+        self.run_calls.append((decision_id, decision_version))
+        return await self.store.append(
+            self.evaluation,
+            created_at=datetime(2026, 8, 18, 15, 0, tzinfo=timezone.utc),
+        )
+
+    async def history(
+        self, decision_id: UUID, decision_version: int, *, limit: int = 20
+    ):
+        self.history_calls.append((decision_id, decision_version, limit))
+        return await self.store.history(decision_id, decision_version, limit=limit)
+
 class FakeOperationStore:
     def __init__(self) -> None:
         self.receipts: dict[tuple[str, UUID], OperationReceipt] = {}
@@ -275,12 +304,14 @@ class FastApiAdapterTests(unittest.TestCase):
         self.authorizer = FakeAuthorizer()
         self.operation_store = FakeOperationStore()
         self.audit_service = FakeAuditService()
+        self.evaluation_service = FakeEvaluationService()
         self.client = TestClient(
             create_app(
                 self.service,
                 self.authorizer,
                 operation_store=self.operation_store,
                 audit_service=self.audit_service,
+                evaluation_service=self.evaluation_service,
             ),
             raise_server_exceptions=False,
         )
@@ -522,6 +553,46 @@ class FastApiAdapterTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"]["code"], "request_validation_failed")
         self.assertEqual(self.audit_service.redact_calls, [])
+
+    def test_evaluation_run_and_history_use_separate_permissions(self) -> None:
+        run = self.client.post(
+            self.path("evaluations"),
+            headers=self.auth,
+            json={"version": 1},
+        )
+        history = self.client.get(
+            self.path("evaluations") + "?version=1&limit=5",
+            headers=self.auth,
+        )
+
+        self.assertEqual(run.status_code, 200)
+        self.assertEqual(run.json()["sequence"], 1)
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(history.json()["total_count"], 1)
+        self.assertEqual(history.json()["trend"]["pass_count"], 1)
+        self.assertEqual(history.headers["cache-control"], "private, no-store")
+        self.assertIn(
+            ("user-1", DECISION_ID, "evaluation:run"),
+            self.authorizer.authorizations,
+        )
+        self.assertIn(
+            ("user-1", DECISION_ID, "evaluation:read"),
+            self.authorizer.authorizations,
+        )
+        self.assertEqual(
+            self.evaluation_service.history_calls[-1],
+            (DECISION_ID, 1, 5),
+        )
+
+    def test_evaluation_permission_denial_does_not_call_service(self) -> None:
+        self.authorizer.denied_actions = {"evaluation:run"}
+
+        response = self.client.post(
+            self.path("evaluations"), headers=self.auth, json={"version": 1}
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.evaluation_service.run_calls, [])
 
     def test_create_rejects_unsafe_evidence_source_url(self) -> None:
         response = self.client.post(

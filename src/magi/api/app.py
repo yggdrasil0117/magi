@@ -48,6 +48,7 @@ from magi.audit import (
     AuditTrailNotFound,
     DecisionAuditTrail,
 )
+from magi.evaluation import EvaluationHistory, EvaluationRecord
 
 from .auth import (
     ApiAuthenticationError,
@@ -62,6 +63,7 @@ from .models import (
     ConfirmDecisionCommand,
     CreateDecisionCommand,
     RunDecisionCommand,
+    RunEvaluationCommand,
     RedactAuditCommand,
 )
 
@@ -118,6 +120,16 @@ class AuditApiService(Protocol):
     ) -> AuditRecord: ...
 
 
+class EvaluationApiService(Protocol):
+    async def run(
+        self, decision_id: UUID, decision_version: int
+    ) -> EvaluationRecord: ...
+
+    async def history(
+        self, decision_id: UUID, decision_version: int, *, limit: int = 20
+    ) -> EvaluationHistory: ...
+
+
 def create_app(
     service: DecisionApiService,
     authorizer: DecisionAuthorizer,
@@ -125,6 +137,7 @@ def create_app(
     idempotency_store: CommandIdempotencyStore | None = None,
     operation_store: OperationStore | None = None,
     audit_service: AuditApiService | None = None,
+    evaluation_service: EvaluationApiService | None = None,
     lifespan: Callable[[FastAPI], AbstractAsyncContextManager[None]] | None = None,
     readiness_probe: ReadinessProbe | None = None,
 ) -> FastAPI:
@@ -513,6 +526,41 @@ def create_app(
         return AuditRecordView.model_validate(record.model_dump())
 
     @app.get(
+        "/v1/decisions/{decision_id}/evaluations",
+        response_model=EvaluationHistory,
+        responses=_error_models(401, 403, 422, 503),
+    )
+    async def get_decision_evaluations(
+        decision_id: UUID,
+        response: Response,
+        principal: PrincipalDependency,
+        version: Annotated[int, Query(ge=1)] = 1,
+        limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    ) -> EvaluationHistory:
+        await authorizer.authorize(principal, decision_id, "evaluation:read")
+        evaluations = _require_evaluation_service(evaluation_service)
+        history = await evaluations.history(decision_id, version, limit=limit)
+        response.headers.update(_private_report_headers())
+        return history
+
+    @app.post(
+        "/v1/decisions/{decision_id}/evaluations",
+        response_model=EvaluationRecord,
+        responses=_error_models(401, 403, 404, 409, 422, 503),
+    )
+    async def run_decision_evaluation(
+        decision_id: UUID,
+        command: RunEvaluationCommand,
+        response: Response,
+        principal: PrincipalDependency,
+    ) -> EvaluationRecord:
+        await authorizer.authorize(principal, decision_id, "evaluation:run")
+        evaluations = _require_evaluation_service(evaluation_service)
+        record = await evaluations.run(decision_id, command.version)
+        response.headers.update(_private_report_headers())
+        return record
+
+    @app.get(
         "/v1/decisions/{decision_id}/report.md",
         response_class=MarkdownResponse,
         responses=_error_models(401, 403, 404, 409, 422),
@@ -808,6 +856,14 @@ def _require_operation_store(store: OperationStore | None) -> OperationStore:
 
 
 def _require_audit_service(service: AuditApiService | None) -> AuditApiService:
+    if service is None:
+        raise StarletteHTTPException(status_code=503)
+    return service
+
+
+def _require_evaluation_service(
+    service: EvaluationApiService | None,
+) -> EvaluationApiService:
     if service is None:
         raise StarletteHTTPException(status_code=503)
     return service

@@ -14,12 +14,15 @@ from magi.agents.invocation import (
     ModelTokenUsage,
 )
 from magi.arbitration import arbitrate
+from magi.audit import AuditDecisionState
 from magi.clients import evaluation_cli
 from magi.domain import AgentName, ArbitrationResult, ArbitrationStatus, ProtocolViolation
 from magi.evaluation import (
     DecisionEvaluator,
     EvaluationBundle,
+    DecisionEvaluationService,
     EvaluationThresholds,
+    InMemoryEvaluationStore,
     MetricStatus,
     ModelPricing,
 )
@@ -121,6 +124,19 @@ class DecisionEvaluatorTests(unittest.TestCase):
         self.assertEqual(evaluation.latency.status, MetricStatus.NOT_MEASURED)
         self.assertEqual(evaluation.cost.status, MetricStatus.NOT_MEASURED)
 
+    def test_cost_preserves_an_explicit_pricing_snapshot_digest(self) -> None:
+        bundle = make_bundle()
+        first = DecisionEvaluator().evaluate(bundle)
+        changed_rate = bundle.pricing[0].model_copy(
+            update={"input_microusd_per_million_tokens": 999_999}
+        )
+        second = DecisionEvaluator().evaluate(
+            bundle.model_copy(update={"pricing": (changed_rate,)})
+        )
+
+        self.assertIsNotNone(first.cost.pricing_digest)
+        self.assertNotEqual(first.cost.pricing_digest, second.cost.pricing_digest)
+
     def test_missing_persona_cannot_pass_differentiation(self) -> None:
         bundle = make_bundle()
         ballots = bundle.ballots[:2]
@@ -185,6 +201,73 @@ class DecisionEvaluatorTests(unittest.TestCase):
             code = evaluation_cli.main([str(path)])
 
         self.assertEqual(code, evaluation_cli.EXIT_INVALID_INPUT)
+
+
+class FakeStateReader:
+    def __init__(self, bundle: EvaluationBundle) -> None:
+        self.bundle = bundle
+        self.calls: list[tuple[UUID, int]] = []
+
+    async def reconstruct_state(
+        self, decision_id: UUID, decision_version: int
+    ) -> AuditDecisionState:
+        self.calls.append((decision_id, decision_version))
+        return AuditDecisionState(
+            case=self.bundle.case,
+            snapshot=self.bundle.snapshot,
+            first_ballots=self.bundle.ballots,
+            result=self.bundle.result,
+            phase="complete",
+        )
+
+
+class FakeInvocationHistory:
+    def __init__(self, bundle: EvaluationBundle) -> None:
+        self.bundle = bundle
+
+    async def records_for(self, decision_id: UUID, decision_version: int):
+        return self.bundle.invocations
+
+
+class EvaluationHistoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_service_rebuilds_authoritative_inputs_and_deduplicates(self) -> None:
+        bundle = make_bundle()
+        reader = FakeStateReader(bundle)
+        store = InMemoryEvaluationStore()
+        service = DecisionEvaluationService(
+            reader,
+            FakeInvocationHistory(bundle),
+            store,
+            pricing=bundle.pricing,
+            thresholds=bundle.thresholds,
+            clock=lambda: TIMESTAMP,
+        )
+
+        first = await service.run(bundle.case.decision_id, bundle.case.version)
+        replay = await service.run(bundle.case.decision_id, bundle.case.version)
+        history = await service.history(bundle.case.decision_id, bundle.case.version)
+
+        self.assertEqual(first, replay)
+        self.assertEqual(first.sequence, 1)
+        self.assertEqual(history.total_count, 1)
+        self.assertEqual(history.trend.pass_count, 1)
+        self.assertEqual(len(reader.calls), 2)
+
+    async def test_history_trend_uses_returned_chronological_window(self) -> None:
+        passing = DecisionEvaluator().evaluate(make_bundle())
+        failing = DecisionEvaluator().evaluate(make_bundle(identical_personas=True))
+        store = InMemoryEvaluationStore()
+        await store.append(passing, created_at=TIMESTAMP)
+        second = await store.append(failing, created_at=TIMESTAMP)
+
+        history = await store.history(
+            passing.decision_id, passing.version, limit=1
+        )
+
+        self.assertEqual(history.total_count, 2)
+        self.assertEqual(history.evaluations, (second,))
+        self.assertEqual(history.trend.sample_count, 1)
+        self.assertEqual(history.trend.fail_count, 1)
 
 
 if __name__ == "__main__":

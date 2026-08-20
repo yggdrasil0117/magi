@@ -13,6 +13,19 @@ from .core import (
     ModelPricing,
     PersonaMetric,
 )
+from .history import (
+    DecisionEvaluationService,
+    EvaluationHistory,
+    EvaluationRecord,
+    EvaluationStore,
+    EvaluationTrend,
+    InMemoryEvaluationStore,
+    build_evaluation_history,
+    build_evaluation_record,
+    evaluation_digest,
+    evaluation_id,
+    evaluation_trend,
+)
 
 __all__ = [
     "ArbitrationMetric",
@@ -20,10 +33,21 @@ __all__ = [
     "CostMetric",
     "DecisionEvaluation",
     "DecisionEvaluator",
+    "DecisionEvaluationService",
     "EvaluationBundle",
     "EvaluationThresholds",
+    "EvaluationHistory",
+    "EvaluationRecord",
+    "EvaluationStore",
+    "EvaluationTrend",
+    "InMemoryEvaluationStore",
     "LatencyMetric",
     "MetricStatus",
     "ModelPricing",
     "PersonaMetric",
+    "build_evaluation_history",
+    "build_evaluation_record",
+    "evaluation_digest",
+    "evaluation_id",
+    "evaluation_trend",
 ]

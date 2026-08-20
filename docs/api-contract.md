@@ -32,6 +32,8 @@ scoped by the authenticated principal.
 | GET /v1/decisions/{id}/report.md | Download the final report as Markdown |
 | GET /v1/decisions/{id}/audit | Read the verified visible audit chain |
 | POST /v1/decisions/{id}/audit/redactions | Append a redaction overlay |
+| GET /v1/decisions/{id}/evaluations | Read evaluation history and trend window |
+| POST /v1/decisions/{id}/evaluations | Recompute and append a server-authoritative evaluation |
 | GET /v1/decisions/{id}/events | Replay authorized public events |
 | GET /v1/decisions | List authorized decisions |
 
@@ -55,6 +57,16 @@ M4c requires the separate `audit:read` action for audit history and
 key and accept a decision version, target audit record ID, simple JSON Pointer
 paths, and a reason. Actor, command identity, and occurrence time are server
 owned. Audit responses are private and never cacheable.
+
+M5b requires `evaluation:read` to read history and `evaluation:run` to generate
+an evaluation. The POST body contains only `version`; the server reconstructs
+the terminal case, snapshot, validations, ballots, and result from the verified
+audit chain and reads invocation attempts from its own ledger. Clients cannot
+submit metrics or authoritative records. An identical evaluation digest returns
+the existing append-only record, so retries do not create duplicate history.
+GET accepts `version` and a `limit` from 1 through 100. The trend summarizes the
+returned chronological window while `total_count` reports the full history.
+Both responses are private and never cacheable.
 
 Decision creation requires the explicit `decision:create` permission. The
 server derives a stable decision ID from the authenticated principal and
@@ -138,7 +150,8 @@ run, cancel, and operation watch without importing the runner.
 
 ### CLI
 
-The `magi` CLI provides scriptable inbox, create, confirm, run, cancel, show, history,
-and operation-watch commands with stable JSON and distinct exit-code families.
+The `magi` CLI provides scriptable inbox, create, confirm, run, cancel, show,
+history, evaluation history/run, and operation-watch commands with stable JSON
+and distinct exit-code families.
 
 No client calculates vote totals or arbitration status.
