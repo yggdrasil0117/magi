@@ -6,7 +6,7 @@ import copy
 import hashlib
 import json
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal, Protocol
 from uuid import UUID, uuid5
 
@@ -434,7 +434,10 @@ def _record_hash(record: AuditRecord) -> str:
         "classification": record.classification.value,
         "payload_hash": record.payload_hash,
         "previous_hash": record.previous_hash,
-        "occurred_at": record.occurred_at.isoformat(),
+        # PostgreSQL TIMESTAMPTZ preserves an instant, not the original timezone
+        # representation. Canonicalize before hashing so a database round trip
+        # cannot make an unchanged envelope appear tampered with.
+        "occurred_at": record.occurred_at.astimezone(timezone.utc).isoformat(),
     }
     return _digest(material)
 

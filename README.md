@@ -98,7 +98,7 @@ policy. Copy `.env.example` to `.env`, configure `MAGI_DATABASE_URL`, and copy
 
 ~~~powershell
 $env:PYTHONPATH = (Resolve-Path "src").Path
-.\.venv\Scripts\python.exe -m uvicorn magi.api.production:create_production_app --factory --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m magi.api
 ~~~
 
 Keep the Ollama endpoint bound to loopback for local-only testing. Ollama's

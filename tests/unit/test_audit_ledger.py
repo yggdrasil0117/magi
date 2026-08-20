@@ -39,6 +39,26 @@ def completed_state() -> dict[str, object]:
 
 
 class DecisionAuditServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_record_hash_is_stable_across_timezone_normalization(self) -> None:
+        ledger = InMemoryAuditLedger()
+        service = DecisionAuditService(ledger)
+        china_time = datetime(
+            2026,
+            8,
+            20,
+            16,
+            30,
+            tzinfo=timezone(timedelta(hours=8)),
+        )
+
+        captured = await service.capture(completed_state(), occurred_at=china_time)
+        normalized = captured.model_copy(
+            update={"occurred_at": china_time.astimezone(timezone.utc)}
+        )
+
+        self.assertEqual(captured.record_hash, normalized.record_hash)
+        type(captured).model_validate(normalized.model_dump())
+
     async def test_missing_trail_is_not_reported_as_verified_empty_history(self) -> None:
         service = DecisionAuditService(InMemoryAuditLedger())
         with self.assertRaises(AuditTrailNotFound):
