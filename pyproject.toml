@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "magi-decision-system"
-version = "0.4.0"
+version = "0.5.0a1"
 description = "Three-perspective decision support with deterministic arbitration"
 requires-python = ">=3.12"
 dependencies = [
@@ -27,6 +27,7 @@ test = []
 magi-report = "magi.clients.report_cli:main"
 magi = "magi.clients.workflow_cli:main"
 magi-tui = "magi.clients.tui:main"
+magi-eval = "magi.clients.evaluation_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/magi"]

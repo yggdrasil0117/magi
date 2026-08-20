@@ -23,3 +23,11 @@ environment setting. A random key is generated only when neither is supplied.
 Exit codes are `0` success, `2` usage, `3` authentication/authorization, `4`
 conflict, and `5` transport/server failure. Output is UTF-8 JSON with deterministic
 key ordering and no ANSI sequences.
+
+## Offline evaluation
+
+`magi-eval BUNDLE.json [--fail-on-threshold]` evaluates sealed records without
+calling the API or a model. It emits one stable JSON `DecisionEvaluation`.
+Exit code `1` means a measured quality threshold failed; invalid or oversized
+input returns `2`. Pricing is supplied in the versioned bundle and is never
+inferred from a mutable provider price page.

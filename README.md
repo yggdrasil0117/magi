@@ -53,6 +53,11 @@ reconstruction that does not depend on LangGraph checkpoints.
 M4c closes M4 at version 0.4.0 with separately authorized audit/redaction APIs
 and matching EVA-inspired Web, keyboard-first TUI, and automation CLI surfaces.
 
+M5a starts M5 at version 0.5.0a1 with a deterministic offline evaluation
+contract. Versioned bundles measure citation validity, minimum pairwise persona
+differentiation, arbitration consistency, provider latency, and explicitly priced
+token cost without making another model call.
+
 ## Local setup (Windows PowerShell)
 
 ~~~powershell
@@ -99,6 +104,7 @@ M3 acceptance and client parity are documented in docs/m3c-client-parity-accepta
 Controlled evidence retrieval is documented in docs/m4a-controlled-evidence-retrieval.md.
 Append-only audit and report reconstruction are documented in docs/m4b-append-only-audit.md.
 M4 audit API and client acceptance are documented in docs/m4c-audit-api-ui.md.
+The M5a evaluation baseline is documented in docs/m5a-evaluation-baseline.md.
 The cross-cutting Web/TUI interface plan is documented in docs/ui-design-plan.md.
 The accepted UI-D1 journeys and information architecture are documented in
 docs/ui-d1-information-architecture.md.

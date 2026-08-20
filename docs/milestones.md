@@ -140,6 +140,8 @@ criteria are satisfied; real-service deployment smoke remains environment-gated.
 
 ## M5: Clients and evaluation
 
+Status: in progress at version 0.5.0a1.
+
 - Implement the confirmed UI system in TUI first, then Web and CLI automation surfaces.
 - Add history and revision views.
 - Cover loading, empty, waiting, denied, partial, degraded, insufficient, failed,
@@ -150,3 +152,9 @@ criteria are satisfied; real-service deployment smoke remains environment-gated.
 
 Exit criterion: all three clients display the same DecisionView for the same
 decision ID, and Web/TUI pass the UI-D5 accessibility and usability gates.
+
+The client-parity and UI-D5 portions were completed on the parallel UI track.
+M5a adds the remaining evaluation foundation: a versioned offline bundle,
+five deterministic metrics, explicit thresholds, stable JSON output, and a CI
+failure exit code. Live representative suites and an EVA-style aggregate metrics
+view remain for later M5 increments.
