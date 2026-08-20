@@ -18,6 +18,14 @@ test("responsive and reduced-motion contracts cover compact layouts", () => {
   assert.match(css, /@media\(max-width:800px\)/);
   assert.match(css, /prefers-reduced-motion:reduce/);
   assert.match(css, /focus-visible/);
+  assert.match(css, /evaluation-metrics/);
+  assert.match(css, /evaluation-metric\.status-not_measured/);
+});
+
+test("evaluation panel remains text-labelled and keyboard reachable", () => {
+  assert.match(html, /<b>05<\/b> 评估/);
+  assert.match(css, /\.evaluation-run/);
+  assert.match(css, /\.metric-status/);
 });
 
 test("production page uses only same-origin assets and no licensed fixture", () => {

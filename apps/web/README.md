@@ -51,6 +51,8 @@ headers.
 Authorized inbox, history, and revision comparison are implemented through dedicated
 principal-scoped API projections.
 
-M5b allowlists the exact evaluation history/run resource through the loopback
-proxy. No metric is calculated in the browser; the EVA-style evaluation panel
-will consume this server-authoritative resource in M5c.
+M5c renders the M5b evaluation resource as an EVA-style five-cell quality panel,
+bounded trend summary, and append-only history window. A terminal decision may
+request a server-side evaluation; the browser submits only the decision version
+and then reloads the authoritative record. Missing operational samples remain
+explicitly labelled `未测量`, and read denial does not block the DecisionView.

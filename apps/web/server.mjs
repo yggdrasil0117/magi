@@ -16,6 +16,7 @@ const staticFiles = new Map([
   ["/commands.mjs", ["commands.mjs", "text/javascript; charset=utf-8"]],
   ["/operations.mjs", ["operations.mjs", "text/javascript; charset=utf-8"]],
   ["/audit.mjs", ["audit.mjs", "text/javascript; charset=utf-8"]],
+  ["/evaluation.mjs", ["evaluation.mjs", "text/javascript; charset=utf-8"]],
   ["/report.mjs", ["report.mjs", "text/javascript; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
   ["/assets/magi-mark.svg", ["prototypes/assets/magi-fallback-mark.svg", "image/svg+xml"]],

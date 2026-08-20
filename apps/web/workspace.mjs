@@ -16,6 +16,13 @@ import {
   fetchDecisionHistory,
   submitAsyncOperation,
 } from "./operations.mjs";
+import {
+  createEvaluationIntent,
+  fetchEvaluationHistory,
+  renderEvaluationHistory,
+  renderEvaluationUnavailable,
+  submitEvaluation,
+} from "./evaluation.mjs";
 
 const REQUIRED_FIELDS = [
   "schema_version", "decision_id", "version", "state", "case", "evidence",
@@ -120,10 +127,17 @@ export function renderWorkspace(root, document) {
   root.append(renderState(view), renderCase(view), renderDisclosure(view), renderEvidence(view));
   const reportRoot = element("section", "authoritative-report");
   if (view.report) renderReport(reportRoot, view.report);
+  const evaluationRoot = element("section", "decision-evaluation");
+  evaluationRoot.id = "decision-evaluation";
+  renderEvaluationUnavailable(
+    evaluationRoot,
+    "需要 evaluation:read 权限以读取服务端权威评估历史。",
+    { canRun: view.terminal },
+  );
   const auditRoot = element("section", "decision-audit");
   auditRoot.id = "decision-audit";
   renderAuditUnavailable(auditRoot, "需要 audit:read 权限以验证并读取规范审计链。");
-  root.append(reportRoot, auditRoot, renderActions(view));
+  root.append(reportRoot, evaluationRoot, auditRoot, renderActions(view));
   root.hidden = false;
   updateShell(view);
 }
@@ -291,6 +305,34 @@ async function syncAudit(root, view, token, signal) {
   }
 }
 
+async function syncEvaluation(root, view, token, signal) {
+  const evaluationRoot = root.querySelector("#decision-evaluation");
+  if (!evaluationRoot) return;
+  try {
+    const history = await fetchEvaluationHistory(
+      view.decisionId,
+      view.version,
+      token,
+      signal,
+    );
+    renderEvaluationHistory(evaluationRoot, history, { canRun: view.terminal });
+    return true;
+  } catch (error) {
+    const message = error.status === 403
+      ? "当前凭据没有 evaluation:read 权限；决策内容仍可正常使用。"
+      : `评估历史不可用：${safeText(error.message)}`;
+    renderEvaluationUnavailable(evaluationRoot, message, { canRun: view.terminal });
+    return false;
+  }
+}
+
+async function syncDiagnostics(root, view, token, signal) {
+  await Promise.all([
+    syncAudit(root, view, token, signal),
+    syncEvaluation(root, view, token, signal),
+  ]);
+}
+
 function bind() {
   const form = document.querySelector("#access-form");
   if (!form) return;
@@ -311,7 +353,7 @@ function bind() {
       pendingIntent = null;
       pendingAuditIntent = null;
       renderWorkspace(root, payload);
-      await syncAudit(root, currentView, currentToken, controller.signal);
+      await syncDiagnostics(root, currentView, currentToken, controller.signal);
       status.textContent = "已从 MAGI API 同步；令牌仍只保留在页面内存。";
     } catch (error) {
       status.className = "status-message error";
@@ -321,9 +363,40 @@ function bind() {
       button.disabled = false;
     }
   });
-  root.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-command]");
-    if (button) openCommandDialog(button.dataset.command);
+  root.addEventListener("click", async (event) => {
+    const commandButton = event.target.closest("[data-command]");
+    if (commandButton) {
+      openCommandDialog(commandButton.dataset.command);
+      return;
+    }
+    const evaluationButton = event.target.closest("[data-evaluation-run]");
+    if (!evaluationButton || evaluationButton.disabled || !currentView) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    evaluationButton.disabled = true;
+    status.className = "status-message";
+    status.textContent = "正在运行服务端权威质量评估…";
+    try {
+      const intent = createEvaluationIntent(currentView.decisionId, currentView.version);
+      await submitEvaluation(intent, currentToken, controller.signal);
+      const historyVisible = await syncEvaluation(
+        root,
+        currentView,
+        currentToken,
+        controller.signal,
+      );
+      status.textContent = historyVisible
+        ? "评估已保存，指标卡与历史窗口已同步。"
+        : "评估已保存；当前凭据无法刷新评估历史。";
+    } catch (error) {
+      status.className = "status-message error";
+      status.textContent = error.name === "AbortError"
+        ? "评估请求超时；重新同步历史可确认是否已保存。"
+        : safeText(error.message);
+    } finally {
+      clearTimeout(timer);
+      evaluationButton.disabled = false;
+    }
   });
   root.addEventListener("submit", async (event) => {
     const auditForm = event.target.closest("#audit-redaction-form");
@@ -418,7 +491,7 @@ function bindCommandDialog(root, status) {
       const payload = await executeCommand(pendingIntent, currentToken, controller.signal);
       pendingIntent = null;
       renderWorkspace(root, payload);
-      await syncAudit(root, currentView, currentToken, controller.signal);
+      await syncDiagnostics(root, currentView, currentToken, controller.signal);
       status.textContent = "命令已由 MAGI API 接受，工作区已同步到返回状态。";
       dialog.close();
     } catch (error) {
@@ -607,7 +680,7 @@ async function monitorOperation(initial, token, root, status) {
       sessionStorage.removeItem("magi.operation.id");
       const payload = await loadDecision(operation.decisionId, operation.version, token, signal);
       renderWorkspace(root, payload);
-      await syncAudit(root, currentView, token, signal);
+      await syncDiagnostics(root, currentView, token, signal);
       status.textContent = "后台任务完成，已载入权威 DecisionView。";
       return;
     }

@@ -101,6 +101,53 @@ class WorkflowCliTests(unittest.TestCase):
         )
         self.assertEqual(run_call.kwargs["body"], {"version": 2})
 
+    def test_terminal_evaluation_dashboard_uses_public_contracts(self) -> None:
+        decision_id = "11111111-1111-4111-8111-111111111111"
+        evaluation = {
+            "overall_status": "warn",
+            "citation_validity": {"status": "pass", "score": 1.0},
+            "persona_differentiation": {"status": "warn", "score": 0.42},
+            "arbitration_consistency": {"status": "pass", "consistent": True},
+            "latency": {"status": "pass", "p95_latency_ms": 1200},
+            "cost": {"status": "not_measured", "total_cost_microusd": None},
+        }
+        record = {
+            "decision_id": decision_id,
+            "decision_version": 2,
+            "sequence": 101,
+            "evaluation": evaluation,
+        }
+        history = {
+            "decision_id": decision_id,
+            "decision_version": 2,
+            "total_count": 101,
+            "evaluations": [record],
+            "trend": {"pass_count": 0, "warn_count": 1, "fail_count": 0},
+        }
+        commands = iter(
+            [f"evaluations {decision_id} 2 8", f"evaluate {decision_id} 2", "quit"]
+        )
+        output: list[str] = []
+        with patch.object(tui, "request_json", side_effect=[history, record]) as request:
+            tui.run(lambda _: next(commands), output.append)
+
+        history_call, run_call = request.call_args_list
+        self.assertEqual(
+            history_call.args,
+            ("GET", f"/v1/decisions/{decision_id}/evaluations?version=2&limit=8"),
+        )
+        self.assertEqual(
+            run_call.args,
+            ("POST", f"/v1/decisions/{decision_id}/evaluations"),
+        )
+        self.assertEqual(run_call.kwargs["body"], {"version": 2})
+        dashboard = "\n".join(output)
+        self.assertIn("QUALITY EVALUATION", dashboard)
+        self.assertIn("E-01 CITATION", dashboard)
+        self.assertIn("E-05 COST", dashboard)
+        self.assertIn("NOT MEASURED", dashboard)
+        self.assertIn("#101 WARN", dashboard)
+
 
 if __name__ == "__main__":
     unittest.main()

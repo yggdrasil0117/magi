@@ -20,8 +20,10 @@ for decisive reports, 2 for advisory/non-decisive reports, 3 for degraded runs,
 4 for failed runs, and 5 for client or transport errors.
 
 The keyboard-first `magi-tui` workflow now covers inbox, get, history, create,
-confirm, run, cancel, audit-chain inspection, redaction, and operation watch
-through the public API. It deliberately
+confirm, run, cancel, audit-chain inspection, redaction, evaluation history/run,
+and operation watch through the public API. `evaluations DECISION [VERSION]
+[LIMIT]` and `evaluate DECISION [VERSION]` render the same five server-authoritative
+metrics as Web, including explicit `NOT MEASURED` states. It deliberately
 uses a dependency-free terminal shell so redirected/no-color behavior remains
 predictable; it never imports the decision engine.
 

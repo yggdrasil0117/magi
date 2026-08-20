@@ -140,7 +140,7 @@ criteria are satisfied; real-service deployment smoke remains environment-gated.
 
 ## M5: Clients and evaluation
 
-Status: in progress at version 0.5.0a2.
+Status: in progress at version 0.5.0a3.
 
 - Implement the confirmed UI system in TUI first, then Web and CLI automation surfaces.
 - Add history and revision views.
@@ -163,5 +163,11 @@ M5b composes evaluation from the verified audit terminal state and model
 invocation ledger, never from client-supplied ballots or metrics. It adds an
 append-only PostgreSQL evaluation history, exact-result deduplication, bounded
 trend summaries, separate `evaluation:read` and `evaluation:run` permissions,
-and API/CLI contracts. EVA-style Web/TUI metric panels and broader live suites
-remain for M5c.
+and API/CLI contracts.
+
+M5c adds matching EVA-inspired Web and terminal quality dashboards over that
+resource. Both expose the same five metrics, latest status, bounded trend window,
+total history count, and explicit not-measured states. Web runs evaluation only
+for terminal decisions and posts only the version; TUI adds `evaluations` and
+`evaluate` commands. Broader representative live suites and final M5 closure
+remain for the next increment.
