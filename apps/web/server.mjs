@@ -8,6 +8,7 @@ import { isAllowedApiOperation, upstreamPath } from "./proxy-contract.mjs";
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.MAGI_WEB_PORT || "3000");
 const upstream = new URL(process.env.MAGI_API_URL || "http://127.0.0.1:8000");
+const localApiToken = (process.env.MAGI_API_TOKEN || "").trim();
 const maxResponseBytes = 1_000_000;
 const maxCommandBytes = 10_000;
 const staticFiles = new Map([
@@ -62,14 +63,20 @@ createServer(async (request, response) => {
     response.end(JSON.stringify({ error: { code: "web_proxy_failed", message: "The decision API could not be reached." } }));
   }
 }).listen(port, "127.0.0.1", () => {
-  process.stdout.write(`MAGI decision workspace: http://127.0.0.1:${port}\n`);
+  const authMode = localApiToken ? "local auto-auth" : "browser token required";
+  process.stdout.write(`MAGI decision workspace: http://127.0.0.1:${port} (${authMode})\n`);
 });
 
 async function proxyDecisionResource(request, response, requestUrl) {
   const method = request.method || "GET";
   const target = new URL(upstreamPath(requestUrl, method), upstream);
   const headers = { accept: "application/json" };
-  if (request.headers.authorization) headers.authorization = request.headers.authorization;
+  const suppliedAuthorization = (request.headers.authorization || "").trim();
+  if (suppliedAuthorization && suppliedAuthorization !== "Bearer") {
+    headers.authorization = suppliedAuthorization;
+  } else if (localApiToken) {
+    headers.authorization = `Bearer ${localApiToken}`;
+  }
   const init = { method, headers, redirect: "error", cache: "no-store" };
   if (method === "POST") {
     headers["content-type"] = "application/json";

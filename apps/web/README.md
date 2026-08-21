@@ -1,9 +1,10 @@
 # Web decision workspace
 
 UI-D4a upgrades `/` from the M3 report-only surface to a real
-`DecisionView` workspace. Enter a known decision ID, version, and bearer token to
-render authoritative case, evidence, disclosed perspectives, available actions,
-and the final report. UI-D4b-1 adds confirm and cancel only when declared by
+`DecisionView` workspace. Its default journey automatically loads the authorized
+decision catalog, opens the latest version with one click, and creates a decision
+from one plain-language question. IDs, versions, operation recovery, risk, and
+classification remain available as advanced controls. UI-D4b-1 adds confirm and cancel only when declared by
 `available_actions`; both use a consequence dialog, second confirmation, frozen
 in-memory idempotency intent, and same-key retry. UI-D4b-2e adds explicit async
 create/run, public-stage monitoring, event replay, and recovery by opaque operation
@@ -40,13 +41,15 @@ Start MAGI's API, then run:
 
 ~~~powershell
 $env:MAGI_API_URL = "http://127.0.0.1:8000"
-node apps/web/server.mjs
+node --env-file=.env apps/web/server.mjs
 ~~~
 
 Open `http://127.0.0.1:3000`. The local server binds only to loopback and allowlists
 decision, report, and audit resources, so the production API does not need a permissive
 CORS policy. Static and proxied responses include a restrictive CSP and no-store
-headers.
+headers. When `.env` supplies `MAGI_API_TOKEN`, the loopback proxy attaches it
+server-side and never exposes it to browser JavaScript. Without that setting, the
+workspace falls back to a single in-memory token prompt.
 
 Authorized inbox, history, and revision comparison are implemented through dedicated
 principal-scoped API projections.

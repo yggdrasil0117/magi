@@ -5,12 +5,21 @@ import test from "node:test";
 const html = await readFile(new URL("./index.html", import.meta.url), "utf8");
 const css = await readFile(new URL("./styles.css", import.meta.url), "utf8");
 
-test("production UI has keyboard landmarks and labelled credential fields", () => {
+test("production UI has keyboard landmarks and one optional credential field", () => {
   assert.match(html, /class="skip-link"/);
   assert.match(html, /<main class="main">/);
   assert.match(html, /aria-live="polite"/);
-  assert.equal((html.match(/type="password"/g) || []).length, 4);
-  assert.equal((html.match(/type="password"[^>]*required/g) || []).length, 4);
+  assert.equal((html.match(/type="password"/g) || []).length, 1);
+  assert.equal((html.match(/type="password"[^>]*required/g) || []).length, 0);
+  assert.match(html, /本地自动鉴权时留空/);
+});
+
+test("default decision creation asks only for a plain-language question", () => {
+  const createForm = html.match(/<form id="create-form">([\s\S]*?)<\/form>/)?.[1] || "";
+  assert.match(createForm, /name="raw_question"[^>]*required/);
+  assert.equal((createForm.match(/required/g) || []).length, 1);
+  assert.match(createForm, /<details class="form-advanced">/);
+  assert.doesNotMatch(createForm, /type="password"/);
 });
 
 test("responsive and reduced-motion contracts cover compact layouts", () => {

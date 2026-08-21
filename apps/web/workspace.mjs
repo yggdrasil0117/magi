@@ -348,8 +348,12 @@ function bind() {
     status.className = "status-message";
     status.textContent = "正在读取权威 DecisionView…";
     try {
-      const payload = await loadDecision(form.elements.decision_id.value.trim(), form.elements.version.value, form.elements.token.value, controller.signal);
-      currentToken = form.elements.token.value;
+      const payload = await loadDecision(
+        form.elements.decision_id.value.trim(),
+        form.elements.version.value,
+        currentToken,
+        controller.signal,
+      );
       pendingIntent = null;
       pendingAuditIntent = null;
       renderWorkspace(root, payload);
@@ -519,7 +523,6 @@ function bindAsyncForms(root, status) {
     event.preventDefault();
     const button = createForm.querySelector("button[type=submit]");
     button.disabled = true;
-    currentToken = createForm.elements.token.value;
     try {
       pendingCreateIntent ||= createAsyncIntent("create", {
           rawQuestion: createForm.elements.raw_question.value,
@@ -539,7 +542,6 @@ function bindAsyncForms(root, status) {
 
   operationForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    currentToken = operationForm.elements.token.value;
     try {
       const operation = await fetchOperation(
         operationForm.elements.operation_id.value.trim(), currentToken,
@@ -554,18 +556,7 @@ function bindAsyncForms(root, status) {
   inboxForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     currentToken = inboxForm.elements.token.value;
-    try {
-      const [inbox, catalog] = await Promise.all([
-        fetchOperationInbox(currentToken), fetchDecisionCatalog(currentToken),
-      ]);
-      renderOperationInbox(inbox);
-      renderDecisionCatalog(catalog);
-      status.className = "status-message";
-      status.textContent = `任务收件箱已同步：${inbox.activeCount} 个进行中，${inbox.failedCount} 个失败。`;
-    } catch (error) {
-      status.className = "status-message error";
-      status.textContent = safeText(error.message);
-    }
+    await refreshHome(status);
   });
 
   document.querySelector("#operation-inbox").addEventListener("click", async (event) => {
@@ -583,13 +574,42 @@ function bindAsyncForms(root, status) {
     const button = event.target.closest("[data-decision-id]");
     if (!button) return;
     try {
-      const history = await fetchDecisionHistory(button.dataset.decisionId, currentToken);
+      status.className = "status-message";
+      status.textContent = "正在打开决策…";
+      const [payload, history] = await Promise.all([
+        loadDecision(button.dataset.decisionId, button.dataset.decisionVersion, currentToken),
+        fetchDecisionHistory(button.dataset.decisionId, currentToken),
+      ]);
+      renderWorkspace(root, payload);
       renderDecisionHistory(history);
+      await syncDiagnostics(root, currentView, currentToken);
+      status.textContent = "已打开最新版决策；可用操作已显示在报告下方。";
+      root.focus();
     } catch (error) {
       status.className = "status-message error";
       status.textContent = safeText(error.message);
     }
   });
+
+  void refreshHome(status);
+}
+
+async function refreshHome(status) {
+  status.className = "status-message";
+  status.textContent = "正在同步决策目录…";
+  try {
+    const [inbox, catalog] = await Promise.all([
+      fetchOperationInbox(currentToken), fetchDecisionCatalog(currentToken),
+    ]);
+    renderOperationInbox(inbox);
+    renderDecisionCatalog(catalog);
+    status.textContent = catalog.decisions.length
+      ? `已载入 ${catalog.decisions.length} 个决策；点击任意条目即可查看。`
+      : "尚无决策。只需在左侧描述问题即可开始。";
+  } catch (error) {
+    status.className = "status-message error";
+    status.textContent = "尚未获得访问权限。请展开左侧“连接设置”，输入一次访问令牌。";
+  }
 }
 
 function renderOperationInbox(inbox) {
@@ -631,6 +651,7 @@ function renderDecisionCatalog(catalog) {
     const button = element("button", "inbox-operation");
     button.type = "button";
     button.dataset.decisionId = decision.decisionId;
+    button.dataset.decisionVersion = String(decision.version);
     button.append(
       element("code", "", `${decision.decisionId} / V${decision.version}`),
       element("strong", "", decision.title),

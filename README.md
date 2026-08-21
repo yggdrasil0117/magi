@@ -101,6 +101,18 @@ $env:PYTHONPATH = (Resolve-Path "src").Path
 .\.venv\Scripts\python.exe -m magi.api
 ~~~
 
+In a second PowerShell window, start the loopback Web workspace. It reads the
+local API token server-side, so the browser can open the decision catalog without
+copying IDs, versions, or credentials:
+
+~~~powershell
+node --env-file=.env apps/web/server.mjs
+~~~
+
+Open `http://127.0.0.1:3000`. The default workflow asks only for a question;
+risk, classification, direct-ID lookup, and operation recovery are advanced
+controls.
+
 Keep the Ollama endpoint bound to loopback for local-only testing. Ollama's
 OpenAI-compatible JSON mode is used automatically when
 `MAGI_OPENAI_BASE_URL` is configured; the official OpenAI structured-output

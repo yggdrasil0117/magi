@@ -18,41 +18,39 @@
 
   <div class="shell">
     <aside class="access-rail">
-      <div class="index-label"><b>01</b><span>DECISION ACCESS</span></div>
-      <p>读取一个已知且获授权的决策版本，或从主界面的决策收件箱选择。</p>
-      <form id="access-form">
-        <label><span>DECISION ID</span><input name="decision_id" type="text" required autocomplete="off" placeholder="UUID"></label>
-        <label><span>VERSION</span><input name="version" type="number" min="1" value="1" required></label>
-        <label><span>BEARER TOKEN</span><input name="token" type="password" required autocomplete="off"></label>
-        <button type="submit">同步决策 <span aria-hidden="true">→</span></button>
-      </form>
-      <details class="async-entry">
-        <summary>新建异步决策</summary>
+      <div class="index-label"><b>01</b><span>NEW DECISION</span></div>
+      <p>描述你需要判断的问题。MAGI 会整理选项，再由你确认后启动三方评估。</p>
+      <section class="primary-entry">
         <form id="create-form">
-          <label><span>RAW QUESTION</span><textarea name="raw_question" maxlength="20000" rows="4" required></textarea></label>
-          <label><span>RISK</span><select name="risk"><option value="low">LOW</option><option value="medium">MEDIUM</option><option value="high">HIGH</option><option value="critical">CRITICAL</option></select></label>
-          <label><span>CLASS</span><select name="classification"><option value="internal">INTERNAL</option><option value="public">PUBLIC</option><option value="sensitive">SENSITIVE</option><option value="restricted">RESTRICTED</option></select></label>
-          <label><span>BEARER TOKEN</span><input name="token" type="password" required autocomplete="off"></label>
-          <label class="confirm-check"><input name="confirmed" type="checkbox" required><span>确认提交后台规范化任务</span></label>
-          <button type="submit">创建任务 <span aria-hidden="true">→</span></button>
+          <label><span>你的问题</span><textarea name="raw_question" maxlength="20000" rows="5" required placeholder="例如：这个功能现在应该发布，还是推迟一周？"></textarea></label>
+          <details class="form-advanced">
+            <summary>风险与隐私设置</summary>
+            <label><span>风险下限</span><select name="risk"><option value="low">普通</option><option value="medium">中等</option><option value="high">高</option><option value="critical">关键</option></select></label>
+            <label><span>数据分类</span><select name="classification"><option value="internal">内部</option><option value="public">公开</option><option value="sensitive">敏感</option><option value="restricted">受限</option></select></label>
+          </details>
+          <button type="submit">交给 MAGI 整理 <span aria-hidden="true">→</span></button>
+        </form>
+      </section>
+      <details class="async-entry">
+        <summary>连接设置</summary>
+        <form id="inbox-form">
+          <label><span>访问令牌（本地自动鉴权时留空）</span><input name="token" type="password" autocomplete="off"></label>
+          <button type="submit">连接并刷新 <span aria-hidden="true">→</span></button>
         </form>
       </details>
       <details class="async-entry">
-        <summary>恢复后台任务</summary>
+        <summary>高级工具</summary>
+        <form id="access-form">
+          <label><span>决策 ID</span><input name="decision_id" type="text" required autocomplete="off" placeholder="UUID"></label>
+          <label><span>版本</span><input name="version" type="number" min="1" value="1" required></label>
+          <button type="submit">按 ID 打开 <span aria-hidden="true">→</span></button>
+        </form>
         <form id="operation-form">
-          <label><span>OPERATION ID</span><input name="operation_id" type="text" required autocomplete="off" placeholder="UUID"></label>
-          <label><span>BEARER TOKEN</span><input name="token" type="password" required autocomplete="off"></label>
-          <button type="submit">恢复监视 <span aria-hidden="true">→</span></button>
+          <label><span>后台任务 ID</span><input name="operation_id" type="text" required autocomplete="off" placeholder="UUID"></label>
+          <button type="submit">恢复任务监视 <span aria-hidden="true">→</span></button>
         </form>
       </details>
-      <details class="async-entry" open>
-        <summary>任务收件箱</summary>
-        <form id="inbox-form">
-          <label><span>BEARER TOKEN</span><input name="token" type="password" required autocomplete="off"></label>
-          <button type="submit">读取我的任务 <span aria-hidden="true">→</span></button>
-        </form>
-      </details>
-      <div class="privacy-note"><strong>LOCAL CREDENTIAL BOUNDARY</strong><p>令牌不写入 localStorage、sessionStorage、URL 或 Cookie。</p></div>
+      <div class="privacy-note"><strong>LOCAL CREDENTIAL BOUNDARY</strong><p>本地令牌由回环代理使用；浏览器不会读取或保存其明文。</p></div>
     </aside>
 
     <main class="main">
@@ -61,7 +59,7 @@
         <dl><div><dt>RISK</dt><dd id="decision-risk">—</dd></div><div><dt>CLASS</dt><dd id="decision-class">—</dd></div><div><dt>SCHEMA</dt><dd>1.0</dd></div></dl>
       </section>
       <nav class="sections" aria-label="工作区分区"><span class="active"><b>01</b> 概览</span><span><b>02</b> 证据</span><span><b>03</b> 三方观点</span><span><b>04</b> 报告</span><span><b>05</b> 评估</span><span><b>06</b> 审计</span></nav>
-      <p id="status-message" class="status-message" role="status" aria-live="polite">输入连接信息后读取权威 DecisionView。</p>
+      <p id="status-message" class="status-message" role="status" aria-live="polite">正在连接 MAGI 并读取决策目录…</p>
       <section id="operation-inbox" class="operation-inbox" aria-live="polite" hidden></section>
       <section id="decision-catalog" class="operation-inbox" aria-live="polite" hidden></section>
       <section id="version-history" class="operation-monitor" aria-live="polite" hidden></section>
