@@ -194,7 +194,7 @@ class LangChainPerspectiveRunner:
         skills_root: str | Path | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
-        max_attempts: int = 2,
+        max_attempts: int = 3,
         ledger: InvocationLedger | None = None,
     ) -> LangChainPerspectiveRunner:
         """Build independent ChatOpenAI structured-output runnables."""
@@ -358,7 +358,17 @@ class LangChainPerspectiveRunner:
                 started_clock = time.perf_counter()
                 usage = ModelTokenUsage()
                 try:
-                    output = await self._models[agent].ainvoke(messages)
+                    attempt_messages = (
+                        messages
+                        if attempt == 1
+                        else self._repair_messages(
+                            messages,
+                            case,
+                            snapshot,
+                            round_number=round_number,
+                        )
+                    )
+                    output = await self._models[agent].ainvoke(attempt_messages)
                     draft, usage = self._parse_model_output(output)
                     if round_number == 1 and (
                         draft.changed_from_previous or draft.review_reason is not None
@@ -394,6 +404,8 @@ class LangChainPerspectiveRunner:
                             error_type=type(exc).__name__,
                         )
                     )
+                    if attempt < self._retry_policy.max_attempts:
+                        continue
                     if isinstance(exc, _ModelOutputError):
                         raise PerspectiveExecutionError(
                             f"{agent.value} model returned an invalid ballot draft"
@@ -584,6 +596,40 @@ class LangChainPerspectiveRunner:
             ("system", system_prompt),
             ("human", human_content),
         ]
+
+    @staticmethod
+    def _repair_messages(
+        messages: list[tuple[str, str]],
+        case: DecisionCase,
+        snapshot: EvidenceSnapshot,
+        *,
+        round_number: int,
+    ) -> list[tuple[str, str]]:
+        """Retry a locally generated ballot with a compact validation reminder."""
+
+        option_ids = [option.id for option in case.options]
+        evidence_ids = [
+            item.evidence_id
+            for item in snapshot.evidence
+            if item.classification is not DataClassification.RESTRICTED
+        ]
+        review_rule = (
+            "changed_from_previous must be false and review_reason must be null."
+            if round_number == 1
+            else "review_reason must be a non-empty string."
+        )
+        correction = (
+            "VALIDATION RETRY: The previous ballot was rejected. Return only a fresh "
+            "ballot JSON object with every required field and no markdown. "
+            f"selected_option must be null or one of {json.dumps(option_ids)}. "
+            f"Every evidence_refs value must be one of {json.dumps(evidence_ids)}. "
+            "stance must be support, oppose, or abstain; confidence must be between "
+            "0 and 1; evidence_quality must be weak, medium, or strong. "
+            "rationale_summary must be a non-empty string array. assumptions, risks, "
+            "missing_information, evidence_refs, and constraint_claims must be arrays. "
+            + review_rule
+        )
+        return [*messages, ("human", correction)]
 
     @staticmethod
     def _seal_ballot(

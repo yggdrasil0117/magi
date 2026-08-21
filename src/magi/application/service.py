@@ -55,6 +55,12 @@ class DecisionGraph(Protocol):
         subgraphs: bool = False,
     ) -> object: ...
 
+    async def aupdate_state(
+        self,
+        config: Mapping[str, Any],
+        values: Mapping[str, Any],
+    ) -> object: ...
+
 
 class DecisionAuditor(Protocol):
     async def capture(
@@ -253,11 +259,21 @@ class DecisionApplicationService:
         )
 
     async def run(self, decision_id: UUID, version: int) -> DecisionView:
-        saved, _, existing = await self._load(decision_id, version)
+        saved, saved_values, existing = await self._load(decision_id, version)
         if existing.state is DecisionState.CANCELLED:
             raise DecisionWorkflowConflict("a cancelled decision cannot be run")
         if existing.terminal:
             return existing
+        if saved_values.get("run_failed"):
+            await self._graph.aupdate_state(
+                self._config(decision_id, version),
+                {"run_failed": False},
+            )
+            state = await self._graph.ainvoke(
+                None,
+                config=self._config(decision_id, version),
+            )
+            return await self._project(state)
         if not existing.awaiting_run:
             raise DecisionWorkflowConflict(
                 "decision workflow is not ready to run"
@@ -267,6 +283,18 @@ class DecisionApplicationService:
             decision_id,
             version,
             RunPayload(start=True).model_dump(mode="json"),
+        )
+
+    async def mark_run_failed(self, decision_id: UUID, version: int) -> None:
+        """Expose a safe retry action without discarding the durable checkpoint."""
+
+        saved, saved_values, existing = await self._load(decision_id, version)
+        del saved
+        if existing.terminal or saved_values.get("run_failed"):
+            return
+        await self._graph.aupdate_state(
+            self._config(decision_id, version),
+            {"run_failed": True},
         )
 
     async def confirm_and_run(

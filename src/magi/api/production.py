@@ -68,7 +68,7 @@ class ProductionSettings:
     openai_base_url: str | None = None
     postgres_min_size: int = 1
     postgres_max_size: int = 10
-    model_max_attempts: int = 2
+    model_max_attempts: int = 3
     evidence_allowed_hosts: frozenset[str] = frozenset()
     evidence_timeout_seconds: float = 8.0
     evidence_max_response_bytes: int = 20_000
@@ -152,7 +152,7 @@ class ProductionSettings:
             auth_policy_file=Path(_required(values, "MAGI_AUTH_POLICY_FILE")),
             postgres_min_size=_integer(values, "MAGI_POSTGRES_MIN_SIZE", 1),
             postgres_max_size=_integer(values, "MAGI_POSTGRES_MAX_SIZE", 10),
-            model_max_attempts=_integer(values, "MAGI_MODEL_MAX_ATTEMPTS", 2),
+            model_max_attempts=_integer(values, "MAGI_MODEL_MAX_ATTEMPTS", 3),
             evidence_allowed_hosts=_hosts(values, "MAGI_EVIDENCE_ALLOWED_HOSTS"),
             evidence_timeout_seconds=_float(
                 values, "MAGI_EVIDENCE_TIMEOUT_SECONDS", 8.0

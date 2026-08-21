@@ -39,6 +39,13 @@ class DecisionOperationExecutor:
             return await self._service.prepare(request)
         return await self._service.run(lease.decision_id, lease.decision_version)
 
+    async def recover_failure(self, lease: OperationLease) -> None:
+        if lease.kind is OperationKind.RUN_DECISION:
+            await self._service.mark_run_failed(
+                lease.decision_id,
+                lease.decision_version,
+            )
+
 
 class OperationWorker:
     """Claim at most one operation and keep its execution capability alive."""
@@ -89,6 +96,12 @@ class OperationWorker:
             except (asyncio.CancelledError, OperationLeaseLost):
                 raise
             except Exception:
+                recovery = getattr(self._executor, "recover_failure", None)
+                if recovery is not None:
+                    try:
+                        await recovery(lease)
+                    except Exception:
+                        pass
                 await self._queue.fail(
                     lease,
                     worker_id=self._worker_id,

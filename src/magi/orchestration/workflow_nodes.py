@@ -103,7 +103,7 @@ class MagiWorkflowNodes:
         command = RunPayload.model_validate(resume_value)
         if not command.start:
             return {"cancelled": True, "phase": "cancelled"}
-        return {"cancelled": False, "phase": "evidence_ready"}
+        return {"cancelled": False, "phase": "evidence_ready", "run_failed": False}
 
     @staticmethod
     def route_after_run(state: MagiGraphState) -> str:

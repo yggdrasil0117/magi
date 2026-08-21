@@ -19,3 +19,4 @@ class MagiGraphState(TypedDict, total=False):
     result: dict[str, Any]
     phase: str
     cancelled: bool
+    run_failed: bool

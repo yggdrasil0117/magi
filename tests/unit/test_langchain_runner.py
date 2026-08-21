@@ -396,6 +396,33 @@ class LangChainPerspectiveRunnerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(tuple(record.attempt for record in ledger.records), (1, 2))
 
+    async def test_invalid_local_output_retries_with_validation_correction(self) -> None:
+        case = make_case()
+        ledger = InMemoryInvocationLedger()
+        invalid = {"raw": None, "parsed": None, "parsing_error": ValueError("bad")}
+        model = SequencedStructuredModel((invalid, make_draft()))
+        runner = self.make_controlled_runner(
+            model,
+            ledger,
+            retry_policy=RetryPolicy(max_attempts=2),
+        )
+
+        ballot = await runner.first_ballot(
+            AgentName.MELCHIOR,
+            case,
+            make_snapshot(case),
+        )
+
+        self.assertEqual(ballot.selected_option, "release")
+        self.assertEqual(len(model.inputs), 2)
+        retry_messages = model.inputs[1]
+        self.assertIn("VALIDATION RETRY", retry_messages[-1][1])
+        self.assertIn('"release"', retry_messages[-1][1])
+        self.assertEqual(
+            tuple(record.status for record in ledger.records),
+            (InvocationStatus.FAILED, InvocationStatus.SUCCEEDED),
+        )
+
     async def test_authentication_failure_is_not_retried(self) -> None:
         class AuthenticationError(Exception):
             pass

@@ -76,8 +76,14 @@ class SuccessfulExecutor:
 
 
 class FailingExecutor:
+    def __init__(self) -> None:
+        self.recovered = False
+
     async def execute(self, operation_lease):
         raise RuntimeError("private model failure")
+
+    async def recover_failure(self, operation_lease):
+        self.recovered = True
 
 
 class CancellingExecutor:
@@ -110,8 +116,9 @@ class OperationWorkerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_failure_is_sanitized(self) -> None:
         queue = FakeQueue(lease())
+        executor = FailingExecutor()
         worker = OperationWorker(
-            queue, FailingExecutor(), worker_id="worker-1", clock=lambda: NOW
+            queue, executor, worker_id="worker-1", clock=lambda: NOW
         )
 
         self.assertTrue(await worker.run_once())
@@ -119,6 +126,7 @@ class OperationWorkerTests(unittest.IsolatedAsyncioTestCase):
         failure = queue.calls[-1][1]
         self.assertEqual(failure["failure_code"], "operation_execution_failed")
         self.assertNotIn("private", repr(failure))
+        self.assertTrue(executor.recovered)
 
     async def test_cancellation_leaves_operation_for_lease_recovery(self) -> None:
         queue = FakeQueue(lease())

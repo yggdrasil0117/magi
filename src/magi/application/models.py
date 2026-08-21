@@ -82,7 +82,11 @@ class DecisionViewProjector:
         report = self._report(state, case, result, ballots)
         decision_state = self._decision_state(state, result)
         awaiting_confirmation = decision_state is DecisionState.WAITING_FOR_USER
-        awaiting_run = decision_state is DecisionState.EVIDENCE_READY
+        run_failed = bool(state.get("run_failed"))
+        awaiting_run = (
+            decision_state is DecisionState.EVIDENCE_READY
+            or run_failed
+        )
         terminal = decision_state in {
             DecisionState.COMPLETED,
             DecisionState.INSUFFICIENT_INFORMATION,
@@ -105,6 +109,7 @@ class DecisionViewProjector:
             available_actions=self._available_actions(
                 awaiting_confirmation,
                 awaiting_run,
+                run_failed,
             ),
         )
 
@@ -131,10 +136,13 @@ class DecisionViewProjector:
     def _available_actions(
         awaiting_confirmation: bool,
         awaiting_run: bool,
+        run_failed: bool = False,
     ) -> tuple[str, ...]:
         if awaiting_confirmation:
             return ("confirm", "cancel")
         if awaiting_run:
+            if run_failed:
+                return ("run",)
             return ("run", "cancel")
         return ()
 

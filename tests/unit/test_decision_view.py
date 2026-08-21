@@ -77,6 +77,24 @@ class DecisionViewProjectorTests(unittest.TestCase):
         self.assertNotIn("melchior rationale", rendered)
         self.assertNotIn("ballot_id", rendered)
 
+    def test_failed_run_exposes_retry_without_releasing_partial_ballots(self) -> None:
+        state = self.state()
+        state["phase"] = "first_ballot"
+        state["run_failed"] = True
+        state["first_ballots"] = [
+            make_ballot(
+                self.case,
+                AgentName.MELCHIOR,
+                "release",
+            ).model_dump(mode="json")
+        ]
+
+        view = self.projector.project(state)
+
+        self.assertTrue(view.awaiting_run)
+        self.assertEqual(view.available_actions, ("run",))
+        self.assertEqual(view.ballots, ())
+
     def test_first_ballots_release_only_after_round_assessment(self) -> None:
         state = self.state()
         ballots = [
