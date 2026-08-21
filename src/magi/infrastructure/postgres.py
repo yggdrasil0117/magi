@@ -795,7 +795,7 @@ class PostgresOperationStore(OperationStore):
     ) -> OperationReceipt:
         validated = DecisionView.model_validate(result)
         if (validated.decision_id != lease.decision_id
-                or validated.decision_version != lease.decision_version):
+                or validated.version != lease.decision_version):
             raise ValueError("operation result decision identity does not match")
         return await self._transition(
             lease, worker_id=worker_id, status=OperationStatus.SUCCEEDED,

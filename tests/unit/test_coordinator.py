@@ -33,6 +33,17 @@ class FakeCoordinatorModel:
         return self.output
 
 
+class SequencedCoordinatorModel:
+    def __init__(self, outputs: list[object]) -> None:
+        self.outputs = outputs
+        self.calls = 0
+
+    async def ainvoke(self, messages: list[tuple[str, str]]) -> object:
+        output = self.outputs[self.calls]
+        self.calls += 1
+        return output
+
+
 def make_draft(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "title": "Production release",
@@ -63,6 +74,39 @@ def make_draft(**overrides: object) -> dict[str, object]:
 
 
 class LangChainCoordinatorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_invalid_local_draft_is_retried_within_bound(self) -> None:
+        skills_root = Path(__file__).resolve().parents[2] / "skills"
+        model = SequencedCoordinatorModel(
+            [{"title": None}, make_draft()]
+        )
+        coordinator = LangChainCoordinator(
+            model,
+            CoordinatorSkillLoader(skills_root),
+            max_attempts=2,
+        )
+
+        case = await coordinator.normalize(
+            NormalizationRequest(raw_question="Should we proceed?")
+        )
+
+        self.assertEqual(model.calls, 2)
+        self.assertEqual(case.title, "Production release")
+
+    async def test_coordinator_retry_bound_is_enforced(self) -> None:
+        skills_root = Path(__file__).resolve().parents[2] / "skills"
+        model = SequencedCoordinatorModel([{"title": None}, make_draft()])
+        coordinator = LangChainCoordinator(
+            model,
+            CoordinatorSkillLoader(skills_root),
+            max_attempts=1,
+        )
+
+        with self.assertRaises(CoordinatorExecutionError):
+            await coordinator.normalize(
+                NormalizationRequest(raw_question="Should we proceed?")
+            )
+        self.assertEqual(model.calls, 1)
+
     def make_coordinator(self, output: object) -> tuple[LangChainCoordinator, FakeCoordinatorModel]:
         skills_root = Path(__file__).resolve().parents[2] / "skills"
         model = FakeCoordinatorModel(output)

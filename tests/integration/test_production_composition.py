@@ -215,6 +215,10 @@ class ProductionCompositionTests(unittest.TestCase):
             coordinator.call_args.kwargs["base_url"],
             "http://127.0.0.1:11434/v1",
         )
+        self.assertEqual(
+            coordinator.call_args.kwargs["max_attempts"],
+            settings.model_max_attempts,
+        )
 
     def test_settings_are_fail_closed_and_hide_secrets(self) -> None:
         with self.assertRaises(ProductionConfigurationError):

@@ -393,6 +393,7 @@ def _build_coordinator(settings: ProductionSettings) -> DecisionNormalizer:
         skills_root=settings.skills_dir,
         api_key=settings.openai_api_key,
         base_url=settings.openai_base_url,
+        max_attempts=settings.model_max_attempts,
     )
 
 

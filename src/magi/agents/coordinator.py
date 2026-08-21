@@ -139,10 +139,14 @@ class LangChainCoordinator:
         skill_loader: CoordinatorSkillLoader,
         *,
         include_schema_instruction: bool = False,
+        max_attempts: int = 2,
     ) -> None:
+        if max_attempts < 1:
+            raise CoordinatorExecutionError("Coordinator attempts must be positive")
         self._model = model
         self._skill_loader = skill_loader
         self._include_schema_instruction = include_schema_instruction
+        self._max_attempts = max_attempts
 
     @classmethod
     def from_openai(
@@ -152,6 +156,7 @@ class LangChainCoordinator:
         skills_root: str | Path | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        max_attempts: int = 2,
     ) -> LangChainCoordinator:
         if not model.strip():
             raise CoordinatorExecutionError("an explicit OpenAI model name is required")
@@ -189,6 +194,7 @@ class LangChainCoordinator:
             structured_model,
             loader,
             include_schema_instruction=base_url is not None,
+            max_attempts=max_attempts,
         )
 
     @classmethod
@@ -219,20 +225,26 @@ class LangChainCoordinator:
                 "restricted decisions cannot be sent to an external Coordinator model"
             )
         messages = self._messages(request)
-        try:
-            output = await self._model.ainvoke(messages)
-            draft = self._parse_output(output)
-            return self._seal_case(request, draft)
-        except CoordinatorExecutionError:
-            raise
-        except ValidationError as exc:
-            raise CoordinatorExecutionError(
-                "Coordinator returned an invalid decision draft"
-            ) from exc
-        except Exception as exc:
-            raise CoordinatorExecutionError(
-                f"Coordinator invocation failed: {type(exc).__name__}"
-            ) from exc
+        last_error: CoordinatorExecutionError | None = None
+        for _attempt in range(1, self._max_attempts + 1):
+            try:
+                output = await self._model.ainvoke(messages)
+                draft = self._parse_output(output)
+                return self._seal_case(request, draft)
+            except CoordinatorExecutionError as exc:
+                last_error = exc
+            except ValidationError as exc:
+                last_error = CoordinatorExecutionError(
+                    "Coordinator returned an invalid decision draft"
+                )
+                last_error.__cause__ = exc
+            except Exception as exc:
+                last_error = CoordinatorExecutionError(
+                    f"Coordinator invocation failed: {type(exc).__name__}"
+                )
+                last_error.__cause__ = exc
+        assert last_error is not None
+        raise last_error
 
     def _messages(self, request: NormalizationRequest) -> list[tuple[str, str]]:
         payload = {

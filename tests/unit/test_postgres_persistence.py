@@ -104,6 +104,8 @@ class FakeConnection:
             return FakeCursor(self.command_row)
         if normalized.startswith("SELECT * FROM magi_operations"):
             return FakeCursor(self.operation_row)
+        if normalized.startswith("UPDATE magi_operations"):
+            return FakeCursor(self.operation_row)
         if normalized.startswith("SELECT 1 FROM magi_operations"):
             return FakeCursor({"exists": 1} if self.operation_row is not None else None)
         if normalized.startswith("SELECT 1 FROM magi_api_command_results"):
@@ -571,6 +573,43 @@ class PostgresCommandIdempotencyTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PostgresOperationStoreTests(unittest.IsolatedAsyncioTestCase):
+    async def test_succeed_accepts_decision_view_version_identity(self) -> None:
+        view = command_view()
+        succeeded_row = {
+            **operation_row(),
+            "status": OperationStatus.SUCCEEDED.value,
+            "stage": OperationStage.COMPLETE.value,
+            "decision_id": view.decision_id,
+            "decision_version": view.version,
+            "completed_at": OPERATION_TIME,
+            "last_event_sequence": 3,
+            "result": view.model_dump(mode="json"),
+        }
+        connection = FakeConnection({}, operation_row=succeeded_row)
+        store = PostgresOperationStore(
+            FakePool(connection)  # type: ignore[arg-type]
+        )
+        claimed = OperationLease(
+            operation_id=OPERATION_ID,
+            kind=OperationKind.CREATE_DECISION,
+            decision_id=view.decision_id,
+            decision_version=view.version,
+            classification=DataClassification.INTERNAL,
+            request_payload={},
+            fencing_token=1,
+            lease_expires_at=OPERATION_TIME,
+        )
+
+        receipt = await store.succeed(
+            claimed,
+            worker_id="worker-1",
+            result=view,
+            completed_at=OPERATION_TIME,
+        )
+
+        self.assertEqual(receipt.status, OperationStatus.SUCCEEDED)
+        self.assertTrue(receipt.result_available)
+
     async def test_claim_returns_none_without_taking_advisory_lock(self) -> None:
         connection = FakeConnection({})
         store = PostgresOperationStore(FakePool(connection))  # type: ignore[arg-type]

@@ -708,12 +708,19 @@ async function monitorOperation(initial, token, root, status) {
     if (operation.status === "failed") {
       sessionStorage.removeItem("magi.operation.id");
       status.className = "status-message error";
-      status.textContent = `后台任务未完成：${operation.failureCode || "operation_failed"}`;
+      status.textContent = operationFailureMessage(operation.failureCode);
       return;
     }
     await delay(Math.min(Math.max(operation.pollAfterMs || 1000, 250), 10000), signal);
     operation = await fetchOperation(operation.operationId, token, signal);
   }
+}
+
+function operationFailureMessage(code) {
+  if (code === "operation_execution_failed") {
+    return "MAGI 未能生成符合协议的结果。系统已安全停止；请再次提交，或把问题描述得更具体。";
+  }
+  return `后台任务未完成：${safeText(code || "operation_failed")}`;
 }
 
 function renderOperationMonitor(operation, events) {
