@@ -33,7 +33,7 @@ test("workspace maps authoritative case, evidence, and actions", () => {
     available_actions: ["confirm", "cancel", "invented"],
   }));
   assert.equal(view.title, "Release decision");
-  assert.equal(view.stateCode, "WAITING FOR USER");
+  assert.equal(view.stateCode, "等待用户");
   assert.deepEqual(view.options.map((item) => item.id), ["release", "delay", "limited"]);
   assert.equal(view.evidence[0].id, "E-001");
   assert.deepEqual(view.actions, ["confirm", "cancel"]);

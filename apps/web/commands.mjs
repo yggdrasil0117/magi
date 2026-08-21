@@ -1,17 +1,18 @@
 import { safeText } from "./report.mjs";
+import { tr } from "./i18n.mjs";
 
 const MUTATIONS = Object.freeze({
   confirm: {
-    title: "确认并冻结当前版本",
-    consequence: "确认后问题、选项、约束和证据边界不可修改；不会启动模型评估。",
+    title: tr("确认并冻结当前版本", "Confirm and freeze this version"),
+    consequence: tr("确认后问题、选项、约束和证据边界不可修改；不会启动模型评估。", "After confirmation, the question, options, constraints, and evidence boundary cannot be changed. Model evaluation will not start yet."),
   },
   cancel: {
-    title: "取消当前决策版本",
-    consequence: "取消会停止当前未完成工作流，但不会删除案例、证据或已有审计记录。",
+    title: tr("取消当前决策版本", "Cancel this decision version"),
+    consequence: tr("取消会停止当前未完成工作流，但不会删除案例、证据或已有审计记录。", "Cancellation stops unfinished work but does not delete the case, evidence, or audit records."),
   },
   run: {
-    title: "启动三方评估",
-    consequence: "任务将在后台执行三人格独立评估、交叉复核与确定性仲裁；页面可断开后恢复。",
+    title: tr("启动三方评估", "Run three-perspective evaluation"),
+    consequence: tr("任务将在后台执行三人格独立评估、交叉复核与确定性仲裁；页面可断开后恢复。", "The background task runs independent perspectives, cross-review, and deterministic arbitration. Monitoring can resume after disconnecting."),
   },
 });
 

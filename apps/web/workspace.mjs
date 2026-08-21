@@ -1,4 +1,5 @@
 import { renderReport, safeText } from "./report.mjs";
+import { bindLanguageToggle, tr } from "./i18n.mjs";
 import { commandPresentation, createCommandIntent, executeCommand } from "./commands.mjs";
 import {
   createRedactionIntent,
@@ -41,18 +42,18 @@ let pendingCreateIntent = null;
 let pendingAuditIntent = null;
 
 export const STATE_PRESENTATION = Object.freeze({
-  created: ["CREATED", "草案已创建", "决策仍在准备阶段。", "waiting"],
-  normalized: ["NORMALIZED", "规范化已完成", "等待进入明确的用户确认边界。", "waiting"],
-  waiting_for_user: ["WAITING FOR USER", "等待确认与冻结", "请核对问题、选项、约束和证据边界。", "waiting"],
-  evidence_ready: ["EVIDENCE READY", "可以启动评估", "决策已冻结，但三方评估尚未开始。", "ready"],
-  first_ballot: ["FIRST BALLOT", "独立评估进行中", "三方意见保持密封，不显示部分投票。", "processing"],
-  cross_review: ["CROSS REVIEW", "有界交叉复核", "已释放的第一轮意见仅为临时意见。", "processing"],
-  arbitrated: ["ARBITRATED", "确定性仲裁完成", "正在形成权威报告。", "processing"],
-  completed: ["COMPLETED", "决策报告已完成", "多数意见与异议均已保存。", "complete"],
-  insufficient_information: ["INSUFFICIENT", "信息不足", "当前证据不足以形成正式选择。", "waiting"],
-  degraded: ["DEGRADED", "无法形成正式结论", "至少一个必要视角不可用。", "degraded"],
-  failed: ["FAILED", "决策协议未完成", "请检查安全的恢复路径和审计信息。", "failed"],
-  cancelled: ["CANCELLED", "决策已取消", "当前版本不会继续运行。", "cancelled"],
+  created: [tr("已创建", "CREATED"), tr("草案已创建", "Draft created"), tr("决策仍在准备阶段。", "The decision is still being prepared."), "waiting"],
+  normalized: [tr("已规范化", "NORMALIZED"), tr("规范化已完成", "Normalization complete"), tr("等待进入明确的用户确认边界。", "Waiting for explicit user confirmation."), "waiting"],
+  waiting_for_user: [tr("等待用户", "WAITING FOR USER"), tr("等待确认与冻结", "Awaiting confirmation"), tr("请核对问题、选项、约束和证据边界。", "Review the question, options, constraints, and evidence boundary."), "waiting"],
+  evidence_ready: [tr("证据就绪", "EVIDENCE READY"), tr("可以启动评估", "Ready to evaluate"), tr("决策已冻结，但三方评估尚未开始。", "The decision is frozen; perspective evaluation has not started."), "ready"],
+  first_ballot: [tr("第一轮投票", "FIRST BALLOT"), tr("独立评估进行中", "Independent evaluation"), tr("三方意见保持密封，不显示部分投票。", "Perspectives remain sealed; partial ballots are not disclosed."), "processing"],
+  cross_review: [tr("交叉复核", "CROSS REVIEW"), tr("有界交叉复核", "Bounded cross-review"), tr("已释放的第一轮意见仅为临时意见。", "Released first-round views remain preliminary."), "processing"],
+  arbitrated: [tr("已仲裁", "ARBITRATED"), tr("确定性仲裁完成", "Deterministic arbitration complete"), tr("正在形成权威报告。", "Generating the authoritative report."), "processing"],
+  completed: [tr("已完成", "COMPLETED"), tr("决策报告已完成", "Decision report complete"), tr("多数意见与异议均已保存。", "Majority rationale and dissent have been preserved."), "complete"],
+  insufficient_information: [tr("信息不足", "INSUFFICIENT"), tr("信息不足", "Insufficient information"), tr("当前证据不足以形成正式选择。", "Current evidence is insufficient for a formal selection."), "waiting"],
+  degraded: [tr("已降级", "DEGRADED"), tr("无法形成正式结论", "No formal conclusion"), tr("至少一个必要视角不可用。", "At least one required perspective is unavailable."), "degraded"],
+  failed: [tr("失败", "FAILED"), tr("决策协议未完成", "Decision protocol incomplete"), tr("请检查安全的恢复路径和审计信息。", "Review recovery options and audit information."), "failed"],
+  cancelled: [tr("已取消", "CANCELLED"), tr("决策已取消", "Decision cancelled"), tr("当前版本不会继续运行。", "This version will not continue."), "cancelled"],
 });
 
 export function decisionWorkspaceView(document) {
@@ -84,11 +85,11 @@ export function decisionWorkspaceView(document) {
     title: safeText(document.case.title),
     rawQuestion: safeText(document.case.raw_question),
     question: safeText(document.case.question),
-    risk: safeText(document.case.risk_level).toUpperCase(),
-    classification: safeText(document.case.data_classification).toUpperCase(),
-    confirmedAt: safeText(document.case.confirmed_at || "Not confirmed"),
+    risk: enumLabel(document.case.risk_level),
+    classification: enumLabel(document.case.data_classification),
+    confirmedAt: safeText(document.case.confirmed_at || tr("未确认", "Not confirmed")),
     options: document.case.options.map((option) => ({ id: safeText(option.id), label: safeText(option.label), description: safeText(option.description) })),
-    constraints: document.case.user_constraints.map((item) => `${safeText(item.strength).toUpperCase()} · ${safeText(item.statement)}`),
+    constraints: document.case.user_constraints.map((item) => `${enumLabel(item.strength)} · ${safeText(item.statement)}`),
     unknowns: cleanList(document.case.unknowns),
     evidence: document.evidence.map(evidenceView),
     ballots,
@@ -101,16 +102,16 @@ export function decisionWorkspaceView(document) {
 
 function evidenceView(item) {
   return {
-    id: safeText(item.evidence_id), source: safeText(item.source), type: safeText(item.source_type),
-    status: safeText(item.verification_status), capturedAt: safeText(item.captured_at),
-    classification: safeText(item.classification), excerpt: safeText(item.excerpt), hash: safeText(item.content_hash),
+    id: safeText(item.evidence_id), source: safeText(item.source), type: enumLabel(item.source_type),
+    status: enumLabel(item.verification_status), capturedAt: safeText(item.captured_at),
+    classification: enumLabel(item.classification), excerpt: safeText(item.excerpt), hash: safeText(item.content_hash),
   };
 }
 
 function ballotView(item) {
   return {
     agent: safeText(item.agent), round: Number(item.round), option: safeText(item.selected_option || "abstain"),
-    stance: safeText(item.stance), rationale: cleanList(item.rationale_summary),
+    stance: enumLabel(item.stance), rationale: cleanList(item.rationale_summary),
     changed: Boolean(item.changed_from_previous), reviewReason: safeText(item.review_reason),
   };
 }
@@ -131,12 +132,12 @@ export function renderWorkspace(root, document) {
   evaluationRoot.id = "decision-evaluation";
   renderEvaluationUnavailable(
     evaluationRoot,
-    "需要 evaluation:read 权限以读取服务端权威评估历史。",
+    tr("需要 evaluation:read 权限以读取服务端权威评估历史。", "evaluation:read permission is required to read authoritative evaluation history."),
     { canRun: view.terminal },
   );
   const auditRoot = element("section", "decision-audit");
   auditRoot.id = "decision-audit";
-  renderAuditUnavailable(auditRoot, "需要 audit:read 权限以验证并读取规范审计链。");
+  renderAuditUnavailable(auditRoot, tr("需要 audit:read 权限以验证并读取规范审计链。", "audit:read permission is required to verify and read the canonical audit chain."));
   root.append(reportRoot, evaluationRoot, auditRoot, renderActions(view));
   root.hidden = false;
   updateShell(view);
@@ -145,21 +146,21 @@ export function renderWorkspace(root, document) {
 function renderState(view) {
   const section = element("section", `state-banner tone-${view.tone}`);
   const index = element("div", "state-index");
-  index.append(element("span", "", "STATE"), element("b", "", stateNumber(view.state)));
+  index.append(element("span", "", tr("状态", "STATE")), element("b", "", stateNumber(view.state)));
   const content = element("div");
   content.append(element("code", "", view.stateCode), element("h2", "", view.stateTitle), element("p", "", view.stateMessage));
   const seal = element("div", "state-seal");
-  seal.append(element("span", "", "VERSION"), element("strong", "", `V${view.version}`), element("small", "", view.terminal ? "TERMINAL" : "ACTIVE"));
+  seal.append(element("span", "", tr("版本", "VERSION")), element("strong", "", `V${view.version}`), element("small", "", view.terminal ? tr("终态", "TERMINAL") : tr("进行中", "ACTIVE")));
   section.append(index, content, seal);
   return section;
 }
 
 function renderCase(view) {
   const section = element("section", "case-grid");
-  const question = panel("CASE / 01", "规范化问题");
+  const question = panel(tr("案例 / 01", "CASE / 01"), tr("规范化问题", "Normalized question"));
   question.append(element("p", "question", view.question));
-  if (view.rawQuestion !== view.question) question.append(labelValue("原始输入", view.rawQuestion));
-  const options = panel("OPTIONS / 02", "候选方案");
+  if (view.rawQuestion !== view.question) question.append(labelValue(tr("原始输入", "Original input"), view.rawQuestion));
+  const options = panel(tr("选项 / 02", "OPTIONS / 02"), tr("候选方案", "Candidate options"));
   const list = element("ol", "option-list");
   view.options.forEach((item) => {
     const row = element("li");
@@ -168,14 +169,14 @@ function renderCase(view) {
     list.append(row);
   });
   options.append(list);
-  const boundary = panel("BOUNDARY / 03", "约束与未知项", "wide");
-  boundary.append(listBlock("用户约束", view.constraints), listBlock("未知项", view.unknowns));
+  const boundary = panel(tr("边界 / 03", "BOUNDARY / 03"), tr("约束与未知项", "Constraints and unknowns"), "wide");
+  boundary.append(listBlock(tr("用户约束", "User constraints"), view.constraints), listBlock(tr("未知项", "Unknowns"), view.unknowns));
   section.append(question, options, boundary);
   return section;
 }
 
 function renderDisclosure(view) {
-  const section = panel("PERSPECTIVES / 04", "三方披露", "wide");
+  const section = panel(tr("三方观点 / 04", "PERSPECTIVES / 04"), tr("三方披露", "Perspective disclosure"), "wide");
   const cells = element("div", "perspective-cells");
   for (const agent of ["melchior", "balthasar", "casper"]) {
     const ballot = view.ballots.find((item) => item.agent === agent);
@@ -184,7 +185,7 @@ function renderDisclosure(view) {
     if (!ballot) {
       cell.append(element("span", "sealed", sealedLabel(view.state)));
     } else {
-      cell.append(element("span", "ballot-option", `${view.preliminary ? "第一轮临时意见" : "最终意见"} · ${ballot.option}`));
+      cell.append(element("span", "ballot-option", `${view.preliminary ? tr("第一轮临时意见", "Preliminary view") : tr("最终意见", "Final view")} · ${ballot.option}`));
       ballot.rationale.forEach((line) => cell.append(element("p", "", line)));
       if (ballot.reviewReason) cell.append(element("small", "", ballot.reviewReason));
     }
@@ -195,9 +196,9 @@ function renderDisclosure(view) {
 }
 
 function renderEvidence(view) {
-  const section = panel("EVIDENCE / 05", "公开证据", "wide");
+  const section = panel(tr("证据 / 05", "EVIDENCE / 05"), tr("公开证据", "Disclosed evidence"), "wide");
   if (!view.evidence.length) {
-    section.append(element("p", "empty", "当前 DecisionView 没有公开证据。"));
+    section.append(element("p", "empty", tr("当前决策没有公开证据。", "This decision has no disclosed evidence.")));
     return section;
   }
   const list = element("div", "evidence-list");
@@ -213,14 +214,14 @@ function renderEvidence(view) {
 function renderActions(view) {
   const section = element("section", "action-gate");
   const code = element("div", "gate-code");
-  code.append(element("span", "", "AVAILABLE ACTIONS"), element("b", "", view.actions.length ? view.actions.join(" / ").toUpperCase() : "NONE"));
+  code.append(element("span", "", tr("可用操作", "AVAILABLE ACTIONS")), element("b", "", view.actions.length ? view.actions.map(actionLabel).join(" / ") : tr("无", "NONE")));
   const copy = element("div", "gate-copy");
-  copy.append(element("strong", "", view.actions.length ? "只执行服务端明确允许的命令" : "当前没有可执行命令"), element("p", "", view.actions.length ? "确认、运行与取消均先核对后果；运行任务支持断线恢复。" : "客户端不会根据状态自行推断权限。"));
+  copy.append(element("strong", "", view.actions.length ? tr("只执行服务端明确允许的命令", "Only server-authorized commands are available") : tr("当前没有可执行命令", "No actions are currently available")), element("p", "", view.actions.length ? tr("确认、运行与取消均先核对后果；运行任务支持断线恢复。", "Confirm consequences before each command; background runs can be resumed.") : tr("客户端不会根据状态自行推断权限。", "The client never infers permissions from state.")));
   const controls = element("div", "gate-actions");
-  if (view.actions.includes("confirm")) controls.append(commandButton("confirm", "确认并冻结", "primary"));
-  if (view.actions.includes("cancel")) controls.append(commandButton("cancel", "取消决策", "danger"));
+  if (view.actions.includes("confirm")) controls.append(commandButton("confirm", tr("确认并冻结", "Confirm and freeze"), "primary"));
+  if (view.actions.includes("cancel")) controls.append(commandButton("cancel", tr("取消决策", "Cancel decision"), "danger"));
   if (view.actions.includes("run")) {
-    controls.append(commandButton("run", "启动三方评估", "primary"));
+    controls.append(commandButton("run", tr("启动三方评估", "Run three-perspective evaluation"), "primary"));
   }
   section.append(code, copy, controls);
   return section;
@@ -251,7 +252,7 @@ function listBlock(label, values) {
   const box = element("div", "list-block");
   box.append(element("small", "", label));
   const list = element("ul");
-  (values.length ? values : ["无"]).forEach((value) => list.append(element("li", "", value)));
+  (values.length ? values : [tr("无", "None")]).forEach((value) => list.append(element("li", "", value)));
   box.append(list);
   return box;
 }
@@ -274,7 +275,11 @@ function stateNumber(state) {
 }
 
 function agentCode(agent) { return { melchior: "M-01", balthasar: "B-02", casper: "C-03" }[agent]; }
-function sealedLabel(state) { return state === "first_ballot" ? "SEALED / IN PROGRESS" : "NO RELEASED BALLOT"; }
+function sealedLabel(state) {
+  return state === "first_ballot"
+    ? tr("已密封 / 进行中", "SEALED / IN PROGRESS")
+    : tr("尚无已公开投票", "NO RELEASED BALLOT");
+}
 
 function element(tag, className = "", text = "") {
   const node = document.createElement(tag);
@@ -299,8 +304,8 @@ async function syncAudit(root, view, token, signal) {
     renderAuditTrail(auditRoot, trail);
   } catch (error) {
     const message = error.status === 403
-      ? "当前凭据没有 audit:read 权限；决策内容仍可正常使用。"
-      : `审计链不可用：${safeText(error.message)}`;
+      ? tr("当前凭据没有 audit:read 权限；决策内容仍可正常使用。", "The current credential lacks audit:read permission; the decision remains available.")
+      : `${tr("审计链不可用", "Audit chain unavailable")}: ${safeText(error.message)}`;
     renderAuditUnavailable(auditRoot, message);
   }
 }
@@ -319,8 +324,8 @@ async function syncEvaluation(root, view, token, signal) {
     return true;
   } catch (error) {
     const message = error.status === 403
-      ? "当前凭据没有 evaluation:read 权限；决策内容仍可正常使用。"
-      : `评估历史不可用：${safeText(error.message)}`;
+      ? tr("当前凭据没有 evaluation:read 权限；决策内容仍可正常使用。", "The current credential lacks evaluation:read permission; the decision remains available.")
+      : `${tr("评估历史不可用", "Evaluation history unavailable")}: ${safeText(error.message)}`;
     renderEvaluationUnavailable(evaluationRoot, message, { canRun: view.terminal });
     return false;
   }
@@ -346,7 +351,7 @@ function bind() {
     button.disabled = true;
     root.hidden = true;
     status.className = "status-message";
-    status.textContent = "正在读取权威 DecisionView…";
+    status.textContent = tr("正在读取权威决策视图…", "Loading the authoritative decision view…");
     try {
       const payload = await loadDecision(
         form.elements.decision_id.value.trim(),
@@ -358,10 +363,10 @@ function bind() {
       pendingAuditIntent = null;
       renderWorkspace(root, payload);
       await syncDiagnostics(root, currentView, currentToken, controller.signal);
-      status.textContent = "已从 MAGI API 同步；令牌仍只保留在页面内存。";
+      status.textContent = tr("已从 MAGI API 同步；令牌仍只保留在页面内存。", "Synchronized with the MAGI API; the token remains in page memory only.");
     } catch (error) {
       status.className = "status-message error";
-      status.textContent = error.name === "AbortError" ? "请求超时，请检查 API 连接。" : safeText(error.message);
+      status.textContent = error.name === "AbortError" ? tr("请求超时，请检查 API 连接。", "Request timed out. Check the API connection.") : safeText(error.message);
     } finally {
       clearTimeout(timer);
       button.disabled = false;
@@ -379,7 +384,7 @@ function bind() {
     const timer = setTimeout(() => controller.abort(), 15000);
     evaluationButton.disabled = true;
     status.className = "status-message";
-    status.textContent = "正在运行服务端权威质量评估…";
+    status.textContent = tr("正在运行服务端权威质量评估…", "Running the authoritative server evaluation…");
     try {
       const intent = createEvaluationIntent(currentView.decisionId, currentView.version);
       await submitEvaluation(intent, currentToken, controller.signal);
@@ -390,12 +395,12 @@ function bind() {
         controller.signal,
       );
       status.textContent = historyVisible
-        ? "评估已保存，指标卡与历史窗口已同步。"
-        : "评估已保存；当前凭据无法刷新评估历史。";
+        ? tr("评估已保存，指标卡与历史窗口已同步。", "Evaluation saved; metrics and history are synchronized.")
+        : tr("评估已保存；当前凭据无法刷新评估历史。", "Evaluation saved; the current credential cannot refresh evaluation history.");
     } catch (error) {
       status.className = "status-message error";
       status.textContent = error.name === "AbortError"
-        ? "评估请求超时；重新同步历史可确认是否已保存。"
+        ? tr("评估请求超时；重新同步历史可确认是否已保存。", "Evaluation request timed out; refresh history to verify whether it was saved.")
         : safeText(error.message);
     } finally {
       clearTimeout(timer);
@@ -422,10 +427,10 @@ function bind() {
       pendingAuditIntent = null;
       await syncAudit(root, currentView, currentToken);
       status.className = "status-message";
-      status.textContent = "脱敏覆盖已追加；规范记录未被修改。";
+      status.textContent = tr("脱敏覆盖已追加；规范记录未被修改。", "Redaction overlay appended; canonical records were not modified.");
     } catch (error) {
       status.className = "status-message error";
-      status.textContent = `${safeText(error.message)} 重试会复用相同幂等键。`;
+      status.textContent = `${safeText(error.message)} ${tr("重试会复用相同幂等键。", "A retry will reuse the same idempotency key.")}`;
     } finally {
       button.disabled = false;
     }
@@ -440,7 +445,7 @@ function openCommandDialog(action) {
   if (pendingIntent && pendingIntent.action !== action) {
     const status = document.querySelector("#status-message");
     status.className = "status-message error";
-    status.textContent = "已有结果未知的命令等待安全重试或放弃，不能创建另一条命令。";
+      status.textContent = tr("已有结果未知的命令等待安全重试或放弃，不能创建另一条命令。", "A command with an unknown outcome must be retried safely or abandoned before creating another command.");
     return;
   }
   dialogAction = action;
@@ -453,7 +458,7 @@ function openCommandDialog(action) {
   reason.disabled = Boolean(pendingIntent);
   document.querySelector("#command-retry-note").hidden = !pendingIntent;
   document.querySelector("#command-abandon").hidden = !pendingIntent;
-  document.querySelector("#command-submit").textContent = pendingIntent ? "使用相同幂等键重试" : "确认执行";
+  document.querySelector("#command-submit").textContent = pendingIntent ? tr("使用相同幂等键重试", "Retry with the same idempotency key") : tr("确认执行", "Confirm command");
   if (!pendingIntent) reason.value = "";
   if (typeof dialog.showModal === "function") dialog.showModal();
   else dialog.setAttribute("open", "");
@@ -467,7 +472,7 @@ function bindCommandDialog(root, status) {
     pendingIntent = null;
     dialog.close();
     status.className = "status-message";
-    status.textContent = "已放弃本地待重试命令；服务端状态将在下次同步时确认。";
+    status.textContent = tr("已放弃本地待重试命令；服务端状态将在下次同步时确认。", "The local pending retry was abandoned; server state will be confirmed on the next synchronization.");
   });
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -483,7 +488,7 @@ function bindCommandDialog(root, status) {
     const timer = setTimeout(() => controller.abort(), 15000);
     submit.disabled = true;
     status.className = "status-message";
-    status.textContent = `${dialogAction === "confirm" ? "确认" : "取消"}命令正在提交…`;
+    status.textContent = dialogAction === "confirm" ? tr("正在提交确认命令…", "Submitting confirmation…") : tr("正在提交取消命令…", "Submitting cancellation…");
     try {
       if (dialogAction === "run") {
         const operation = await submitAsyncOperation(pendingIntent, currentToken, controller.signal);
@@ -496,15 +501,15 @@ function bindCommandDialog(root, status) {
       pendingIntent = null;
       renderWorkspace(root, payload);
       await syncDiagnostics(root, currentView, currentToken, controller.signal);
-      status.textContent = "命令已由 MAGI API 接受，工作区已同步到返回状态。";
+      status.textContent = tr("命令已由 MAGI API 接受，工作区已同步到返回状态。", "The MAGI API accepted the command and the workspace is synchronized.");
       dialog.close();
     } catch (error) {
       status.className = "status-message error";
-      status.textContent = error.name === "AbortError" ? "请求结果未知；请使用相同幂等键重试，或重新同步状态。" : safeText(error.message);
+      status.textContent = error.name === "AbortError" ? tr("请求结果未知；请使用相同幂等键重试，或重新同步状态。", "The request outcome is unknown; retry with the same idempotency key or synchronize state.") : safeText(error.message);
       document.querySelector("#command-retry-note").hidden = false;
       document.querySelector("#command-abandon").hidden = false;
       document.querySelector("#cancel-reason").disabled = true;
-      submit.textContent = "使用相同幂等键重试";
+      submit.textContent = tr("使用相同幂等键重试", "Retry with the same idempotency key");
     } finally {
       clearTimeout(timer);
       submit.disabled = false;
@@ -534,7 +539,7 @@ function bindAsyncForms(root, status) {
       await monitorOperation(operation, currentToken, root, status);
     } catch (error) {
       status.className = "status-message error";
-      status.textContent = `${safeText(error.message)} 再次提交将复用相同幂等键。`;
+      status.textContent = `${safeText(error.message)} ${tr("再次提交将复用相同幂等键。", "Submitting again will reuse the same idempotency key.")}`;
     } finally {
       button.disabled = false;
     }
@@ -575,7 +580,7 @@ function bindAsyncForms(root, status) {
     if (!button) return;
     try {
       status.className = "status-message";
-      status.textContent = "正在打开决策…";
+      status.textContent = tr("正在打开决策…", "Opening decision…");
       const [payload, history] = await Promise.all([
         loadDecision(button.dataset.decisionId, button.dataset.decisionVersion, currentToken),
         fetchDecisionHistory(button.dataset.decisionId, currentToken),
@@ -583,7 +588,7 @@ function bindAsyncForms(root, status) {
       renderWorkspace(root, payload);
       renderDecisionHistory(history);
       await syncDiagnostics(root, currentView, currentToken);
-      status.textContent = "已打开最新版决策；可用操作已显示在报告下方。";
+      status.textContent = tr("已打开最新版决策；可用操作已显示在报告下方。", "The latest decision version is open; available actions appear below the report.");
       root.focus();
     } catch (error) {
       status.className = "status-message error";
@@ -596,7 +601,7 @@ function bindAsyncForms(root, status) {
 
 async function refreshHome(status) {
   status.className = "status-message";
-  status.textContent = "正在同步决策目录…";
+  status.textContent = tr("正在同步决策目录…", "Synchronizing the decision catalog…");
   try {
     const [inbox, catalog] = await Promise.all([
       fetchOperationInbox(currentToken), fetchDecisionCatalog(currentToken),
@@ -604,11 +609,11 @@ async function refreshHome(status) {
     renderOperationInbox(inbox);
     renderDecisionCatalog(catalog);
     status.textContent = catalog.decisions.length
-      ? `已载入 ${catalog.decisions.length} 个决策；点击任意条目即可查看。`
-      : "尚无决策。只需在左侧描述问题即可开始。";
+      ? tr(`已载入 ${catalog.decisions.length} 个决策；点击任意条目即可查看。`, `${catalog.decisions.length} decisions loaded. Select any item to view it.`)
+      : tr("尚无决策。只需在左侧描述问题即可开始。", "No decisions yet. Describe a question on the left to begin.");
   } catch (error) {
     status.className = "status-message error";
-    status.textContent = "尚未获得访问权限。请展开左侧“连接设置”，输入一次访问令牌。";
+    status.textContent = tr("尚未获得访问权限。请展开左侧“连接设置”，输入一次访问令牌。", "Access has not been granted. Open Connection settings and enter an access token once.");
   }
 }
 
@@ -617,12 +622,12 @@ function renderOperationInbox(inbox) {
   root.replaceChildren();
   const heading = element("header", "inbox-heading");
   heading.append(
-    element("span", "", "AUTHORIZED OPERATION INBOX"),
-    element("strong", "", `${inbox.activeCount} ACTIVE / ${inbox.failedCount} FAILED`),
+    element("span", "", tr("已授权任务收件箱", "AUTHORIZED OPERATION INBOX")),
+    element("strong", "", `${inbox.activeCount} ${tr("进行中", "ACTIVE")} / ${inbox.failedCount} ${tr("失败", "FAILED")}`),
   );
   root.append(heading);
   if (!inbox.operations.length) {
-    root.append(element("p", "empty", "当前主体没有后台任务。"));
+    root.append(element("p", "empty", tr("当前主体没有后台任务。", "There are no background operations for this principal.")));
   }
   inbox.operations.forEach((operation) => {
     const button = element("button", `inbox-operation status-${operation.status}`);
@@ -630,8 +635,8 @@ function renderOperationInbox(inbox) {
     button.dataset.operationId = operation.operationId;
     button.append(
       element("code", "", operation.operationId),
-      element("strong", "", `${operation.kind === "create_decision" ? "创建" : "运行"} · ${stageLabel(operation.stage)}`),
-      element("span", "", `${operation.status.toUpperCase()} / V${operation.version}`),
+      element("strong", "", `${operation.kind === "create_decision" ? tr("创建", "CREATE") : tr("运行", "RUN")} · ${stageLabel(operation.stage)}`),
+      element("span", "", `${operationStatusLabel(operation.status)} / V${operation.version}`),
     );
     root.append(button);
   });
@@ -643,8 +648,8 @@ function renderDecisionCatalog(catalog) {
   root.replaceChildren();
   const heading = element("header", "inbox-heading");
   heading.append(
-    element("span", "", "AUTHORIZED DECISION CATALOG"),
-    element("strong", "", `${catalog.requiredActionCount} REQUIRE ACTION`),
+    element("span", "", tr("已授权决策目录", "AUTHORIZED DECISION CATALOG")),
+    element("strong", "", `${catalog.requiredActionCount} ${tr("项需要操作", "REQUIRE ACTION")}`),
   );
   root.append(heading);
   catalog.decisions.forEach((decision) => {
@@ -655,22 +660,22 @@ function renderDecisionCatalog(catalog) {
     button.append(
       element("code", "", `${decision.decisionId} / V${decision.version}`),
       element("strong", "", decision.title),
-      element("span", "", `${decision.state.toUpperCase()} · ${decision.actions.join(" / ") || "READ"}`),
+      element("span", "", `${decisionStateLabel(decision.state)} · ${decision.actions.map(actionLabel).join(" / ") || tr("只读", "READ")}`),
     );
     root.append(button);
   });
-  if (!catalog.decisions.length) root.append(element("p", "empty", "暂无已编目决策。"));
+  if (!catalog.decisions.length) root.append(element("p", "empty", tr("暂无已编目决策。", "No cataloged decisions.")));
   root.hidden = false;
 }
 
 function renderDecisionHistory(history) {
   const root = document.querySelector("#version-history");
-  root.replaceChildren(element("code", "", `VERSION HISTORY / ${history.decisionId}`));
+  root.replaceChildren(element("code", "", `${tr("版本历史", "VERSION HISTORY")} / ${history.decisionId}`));
   const grid = element("div", "history-grid");
   history.versions.forEach((view) => {
     const card = element("article", "history-version");
     card.append(
-      element("strong", "", `V${view.version} · ${safeText(view.state).toUpperCase()}`),
+      element("strong", "", `V${view.version} · ${decisionStateLabel(view.state)}`),
       element("span", "", safeText(view.case?.title)),
       element("p", "", safeText(view.case?.question)),
       element("small", "", `${safeText(view.case?.risk_level).toUpperCase()} / ${safeText(view.case?.data_classification).toUpperCase()}`),
@@ -696,13 +701,13 @@ async function monitorOperation(initial, token, root, status) {
     eventLog.push(...page.events);
     renderOperationMonitor(operation, eventLog);
     status.className = "status-message";
-    status.textContent = `后台任务：${stageLabel(operation.stage)} / ${operation.status}`;
+    status.textContent = `${tr("后台任务", "Background operation")}: ${stageLabel(operation.stage)} / ${operation.status}`;
     if (operation.status === "succeeded") {
       sessionStorage.removeItem("magi.operation.id");
       const payload = await loadDecision(operation.decisionId, operation.version, token, signal);
       renderWorkspace(root, payload);
       await syncDiagnostics(root, currentView, token, signal);
-      status.textContent = "后台任务完成，已载入权威 DecisionView。";
+      status.textContent = tr("后台任务完成，已载入权威决策视图。", "Background operation complete; the authoritative decision view is loaded.");
       return;
     }
     if (operation.status === "failed") {
@@ -718,9 +723,9 @@ async function monitorOperation(initial, token, root, status) {
 
 function operationFailureMessage(code) {
   if (code === "operation_execution_failed") {
-    return "MAGI 未能生成符合协议的结果。系统已安全停止；请再次提交，或把问题描述得更具体。";
+    return tr("MAGI 未能生成符合协议的结果。系统已安全停止；请再次提交，或把问题描述得更具体。", "MAGI could not generate a protocol-compliant result. The system stopped safely; submit again or make the question more specific.");
   }
-  return `后台任务未完成：${safeText(code || "operation_failed")}`;
+  return `${tr("后台任务未完成", "Background operation incomplete")}: ${safeText(code || "operation_failed")}`;
 }
 
 function renderOperationMonitor(operation, events) {
@@ -728,9 +733,9 @@ function renderOperationMonitor(operation, events) {
   monitor.replaceChildren();
   const heading = element("div", "operation-heading");
   heading.append(
-    element("code", "", `OPERATION ${operation.operationId}`),
+    element("code", "", `${tr("后台任务", "OPERATION")} ${operation.operationId}`),
     element("strong", "", stageLabel(operation.stage)),
-    element("span", "", `${operation.status.toUpperCase()} · V${operation.version}`),
+    element("span", "", `${operationStatusLabel(operation.status)} · V${operation.version}`),
   );
   const rail = element("ol", "operation-stages");
   ["queued", "coordinator", "first_ballot", "cross_review", "arbitration", "reporting", "complete"]
@@ -746,10 +751,34 @@ function renderOperationMonitor(operation, events) {
 
 function stageLabel(stage) {
   return {
-    queued: "排队", coordinator: "问题规范化", first_ballot: "独立评估",
-    cross_review: "交叉复核", arbitration: "确定性仲裁", reporting: "形成报告",
-    complete: "完成",
+    queued: tr("排队", "Queued"), coordinator: tr("问题规范化", "Normalization"), first_ballot: tr("独立评估", "Independent evaluation"),
+    cross_review: tr("交叉复核", "Cross-review"), arbitration: tr("确定性仲裁", "Arbitration"), reporting: tr("形成报告", "Reporting"),
+    complete: tr("完成", "Complete"),
   }[stage] || safeText(stage);
+}
+
+function actionLabel(action) {
+  return { confirm: tr("确认", "CONFIRM"), run: tr("运行", "RUN"), cancel: tr("取消", "CANCEL") }[action] || safeText(action);
+}
+
+function operationStatusLabel(status) {
+  return { accepted: tr("已接受", "ACCEPTED"), running: tr("运行中", "RUNNING"), succeeded: tr("成功", "SUCCEEDED"), failed: tr("失败", "FAILED") }[status] || safeText(status);
+}
+
+function decisionStateLabel(state) {
+  return STATE_PRESENTATION[state]?.[0] || safeText(state);
+}
+
+function enumLabel(value) {
+  const labels = {
+    low: tr("普通", "LOW"), medium: tr("中等", "MEDIUM"), high: tr("高", "HIGH"), critical: tr("关键", "CRITICAL"),
+    public: tr("公开", "PUBLIC"), internal: tr("内部", "INTERNAL"), sensitive: tr("敏感", "SENSITIVE"), restricted: tr("受限", "RESTRICTED"),
+    hard: tr("硬约束", "HARD"), soft: tr("软约束", "SOFT"),
+    support: tr("支持", "SUPPORT"), oppose: tr("反对", "OPPOSE"), abstain: tr("弃权", "ABSTAIN"),
+    verified: tr("已验证", "VERIFIED"), user_asserted: tr("用户声明", "USER ASSERTED"), unverified: tr("未验证", "UNVERIFIED"),
+    user: tr("用户", "USER"), url: tr("网址", "URL"), file: tr("文件", "FILE"), note: tr("备注", "NOTE"),
+  };
+  return labels[value] || safeText(value).toUpperCase();
 }
 
 function delay(milliseconds, signal) {
@@ -762,4 +791,7 @@ function delay(milliseconds, signal) {
   });
 }
 
-if (typeof document !== "undefined") bind();
+if (typeof document !== "undefined") {
+  bindLanguageToggle(document);
+  bind();
+}

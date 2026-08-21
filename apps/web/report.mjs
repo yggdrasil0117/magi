@@ -21,10 +21,10 @@ export function reportView(report) {
   }
   return {
     identity: `${safeText(report.decision_id)} · v${Number(report.version)}`,
-    status: safeText(report.status),
+    status: reportStatus(report.status),
     selected: report.selected_option
       ? `${safeText(report.selected_option_label || report.selected_option)} [${safeText(report.selected_option)}]`
-      : "No selected option",
+      : tr("未选择方案", "No selected option"),
     ballots: Number(report.ballot_count),
     votes: Object.entries(report.vote_count)
       .sort(([left], [right]) => left.localeCompare(right))
@@ -32,7 +32,7 @@ export function reportView(report) {
     majority: cleanList(report.majority_rationale),
     minority: report.minority_report
       ? [
-          `${safeText(report.minority_report.agent)} · ${safeText(report.minority_report.stance)} · ${safeText(report.minority_report.selected_option || "abstain")}`,
+          `${safeText(report.minority_report.agent)} · ${stanceLabel(report.minority_report.stance)} · ${safeText(report.minority_report.selected_option || tr("弃权", "abstain"))}`,
           ...cleanList(report.minority_report.rationale_summary),
         ]
       : [],
@@ -44,7 +44,7 @@ export function reportView(report) {
     nextStep: safeText(report.recommended_next_step),
     audit: report.review_audit.map((entry) => ({
       agent: safeText(entry.agent),
-      action: entry.changed ? "REVISED" : "RETAINED",
+      action: entry.changed ? tr("已修订", "REVISED") : tr("已保留", "RETAINED"),
       reason: safeText(entry.reason),
     })),
     generatedAt: safeText(report.generated_at),
@@ -65,25 +65,38 @@ function cleanList(values) {
   return values.filter(Boolean).map(safeText);
 }
 
+function reportStatus(status) {
+  return {
+    consensus: tr("共识", "CONSENSUS"), majority: tr("多数通过", "MAJORITY"),
+    conditional_rejection: tr("有条件否决", "CONDITIONAL REJECTION"),
+    insufficient_information: tr("信息不足", "INSUFFICIENT INFORMATION"),
+    degraded: tr("降级", "DEGRADED"), failed: tr("失败", "FAILED"),
+  }[status] || safeText(status).toUpperCase();
+}
+
+function stanceLabel(stance) {
+  return { support: tr("支持", "SUPPORT"), oppose: tr("反对", "OPPOSE"), abstain: tr("弃权", "ABSTAIN") }[stance] || safeText(stance).toUpperCase();
+}
+
 export function renderReport(root, report) {
   const view = reportView(report);
   root.replaceChildren();
   root.append(summary(view));
   const grid = element("div", "report-grid");
   grid.append(
-    listCard("VOTE COUNT", view.votes),
-    listCard("MAJORITY RATIONALE", view.majority),
-    listCard("MINORITY REPORT", view.minority),
-    listCard("EVIDENCE REFERENCES", view.evidence),
-    listCard("ASSUMPTIONS", view.assumptions),
-    listCard("UNRESOLVED QUESTIONS", view.questions),
-    listCard("RISKS", view.risks),
-    listCard("CONDITIONS", view.conditions),
-    textCard("RECOMMENDED NEXT STEP", view.nextStep, "wide next-step"),
+    listCard(tr("投票统计", "VOTE COUNT"), view.votes),
+    listCard(tr("多数意见理由", "MAJORITY RATIONALE"), view.majority),
+    listCard(tr("少数意见报告", "MINORITY REPORT"), view.minority),
+    listCard(tr("证据引用", "EVIDENCE REFERENCES"), view.evidence),
+    listCard(tr("假设", "ASSUMPTIONS"), view.assumptions),
+    listCard(tr("未解决问题", "UNRESOLVED QUESTIONS"), view.questions),
+    listCard(tr("风险", "RISKS"), view.risks),
+    listCard(tr("条件", "CONDITIONS"), view.conditions),
+    textCard(tr("建议的下一步", "RECOMMENDED NEXT STEP"), view.nextStep, "wide next-step"),
     auditCard(view.audit),
     textCard(
-      "PROVENANCE",
-      `Generated ${view.generatedAt} · Protocol ${view.protocol} · Rule ${view.rule}`,
+      tr("来源信息", "PROVENANCE"),
+      tr(`生成于 ${view.generatedAt} · 协议 ${view.protocol} · 规则 ${view.rule}`, `Generated ${view.generatedAt} · Protocol ${view.protocol} · Rule ${view.rule}`),
       "wide",
     ),
   );
@@ -94,10 +107,10 @@ export function renderReport(root, report) {
 function summary(view) {
   const panel = element("div", "report-summary");
   panel.append(
-    summaryCell("FINAL STATUS", view.status.toUpperCase(), "primary"),
-    summaryCell("SELECTED", view.selected),
-    summaryCell("BALLOTS", String(view.ballots)),
-    summaryCell("DECISION", view.identity, "warning"),
+    summaryCell(tr("最终状态", "FINAL STATUS"), view.status.toUpperCase(), "primary"),
+    summaryCell(tr("选择结果", "SELECTED"), view.selected),
+    summaryCell(tr("投票数", "BALLOTS"), String(view.ballots)),
+    summaryCell(tr("决策", "DECISION"), view.identity, "warning"),
   );
   return panel;
 }
@@ -112,7 +125,7 @@ function listCard(title, items) {
   const card = element("article", "report-card");
   card.append(element("h3", "", title));
   if (!items.length) {
-    card.append(element("p", "empty", "None recorded."));
+    card.append(element("p", "empty", tr("无记录。", "None recorded.")));
     return card;
   }
   const list = element("ul");
@@ -129,9 +142,9 @@ function textCard(title, value, className = "") {
 
 function auditCard(entries) {
   const card = element("article", "report-card wide");
-  card.append(element("h3", "", "REVIEW AUDIT"));
+  card.append(element("h3", "", tr("复核审计", "REVIEW AUDIT")));
   if (!entries.length) {
-    card.append(element("p", "empty", "No cross-review was required."));
+    card.append(element("p", "empty", tr("无需交叉复核。", "No cross-review was required.")));
     return card;
   }
   for (const entry of entries) {
@@ -179,7 +192,7 @@ function bind() {
     button.disabled = true;
     root.hidden = true;
     status.className = "status-message";
-    status.textContent = "Loading authoritative report…";
+    status.textContent = tr("正在载入权威报告…", "Loading authoritative report…");
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10000);
     try {
@@ -202,3 +215,4 @@ function bind() {
 }
 
 if (typeof document !== "undefined" && document.querySelector("#report-form")) bind();
+import { tr } from "./i18n.mjs";

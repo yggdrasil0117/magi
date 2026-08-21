@@ -32,9 +32,16 @@ test("responsive and reduced-motion contracts cover compact layouts", () => {
 });
 
 test("evaluation panel remains text-labelled and keyboard reachable", () => {
-  assert.match(html, /<b>05<\/b> 评估/);
+  assert.match(html, /<b>05<\/b> <i[^>]*>评估<\/i>/);
   assert.match(css, /\.evaluation-run/);
   assert.match(css, /\.metric-status/);
+});
+
+test("global language switch covers static Chinese and English labels", () => {
+  assert.match(html, /id="language-toggle"/);
+  assert.match(html, /data-zh="新建决策" data-en="NEW DECISION"/);
+  assert.match(html, /data-zh="概览" data-en="OVERVIEW"/);
+  assert.match(html, /data-zh="确认执行" data-en="Confirm command"/);
 });
 
 test("production page uses only same-origin assets and no licensed fixture", () => {

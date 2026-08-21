@@ -1,4 +1,5 @@
 import { safeText } from "./report.mjs";
+import { tr } from "./i18n.mjs";
 
 const HASH = /^[a-f0-9]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -89,19 +90,19 @@ export function renderAuditTrail(root, trail) {
   root.replaceChildren();
   const heading = element("div", "audit-heading");
   heading.append(
-    element("span", "", "AUDIT CHAIN / 06"),
-    element("strong", "", `${trail.integrity} · ${trail.records.length} RECORDS`),
+    element("span", "", tr("审计链 / 06", "AUDIT CHAIN / 06")),
+    element("strong", "", `${trail.integrity} · ${trail.records.length} ${tr("条记录", "RECORDS")}`),
   );
   const timeline = element("ol", "audit-timeline");
   trail.records.forEach((record) => {
     const item = element("li", record.redacted.length ? "redacted" : "");
     item.append(
       element("code", "", String(record.sequence).padStart(2, "0")),
-      element("strong", "", record.kind === "decision_state" ? "DECISION STATE" : "REDACTION"),
-      element("span", "", `${record.phase} · ${record.classification}`),
+      element("strong", "", record.kind === "decision_state" ? tr("决策状态", "DECISION STATE") : tr("脱敏", "REDACTION")),
+      element("span", "", `${phaseLabel(record.phase)} · ${classificationLabel(record.classification)}`),
       element("small", "", `${record.occurredAt} · ${record.hash.slice(0, 12)}…`),
     );
-    if (record.redacted.length) item.append(element("em", "", `REDACTED ${record.redacted.join(" / ")}`));
+    if (record.redacted.length) item.append(element("em", "", `${tr("已脱敏", "REDACTED")} ${record.redacted.join(" / ")}`));
     timeline.append(item);
   });
   root.append(heading, timeline, redactionForm(trail));
@@ -109,28 +110,28 @@ export function renderAuditTrail(root, trail) {
 
 export function renderAuditUnavailable(root, message) {
   root.replaceChildren(
-    element("div", "audit-heading", "AUDIT CHAIN / 06"),
+    element("div", "audit-heading", tr("审计链 / 06", "AUDIT CHAIN / 06")),
     element("p", "audit-unavailable", safeText(message)),
   );
 }
 
 function redactionForm(trail) {
   const details = element("details", "audit-redaction");
-  details.append(element("summary", "", "追加脱敏覆盖（需要 audit:redact）"));
+  details.append(element("summary", "", tr("追加脱敏覆盖（需要 audit:redact）", "Append redaction overlay (requires audit:redact)")));
   const form = element("form");
   form.id = "audit-redaction-form";
   form.dataset.decisionId = trail.decisionId;
   form.dataset.version = String(trail.version);
   form.append(
-    field("TARGET RECORD ID", "target_record_id", "text"),
-    field("JSON POINTER", "field_path", "text", "/case/raw_question"),
-    field("REASON", "reason", "text"),
+    field(tr("目标记录 ID", "TARGET RECORD ID"), "target_record_id", "text"),
+    field(tr("JSON 路径", "JSON POINTER"), "field_path", "text", "/case/raw_question"),
+    field(tr("原因", "REASON"), "reason", "text"),
   );
   const confirm = element("label", "audit-confirm");
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox"; checkbox.name = "confirmed"; checkbox.required = true;
-  confirm.append(checkbox, element("span", "", "确认仅追加覆盖事件，不删除规范记录"));
-  const button = element("button", "", "追加脱敏事件");
+  confirm.append(checkbox, element("span", "", tr("确认仅追加覆盖事件，不删除规范记录", "Confirm that this appends an overlay without deleting canonical records")));
+  const button = element("button", "", tr("追加脱敏事件", "Append redaction event"));
   button.type = "submit";
   form.append(confirm, button);
   details.append(form);
@@ -143,6 +144,18 @@ function field(label, name, type, value = "") {
   input.name = name; input.type = type; input.required = true; input.value = value;
   wrapper.append(element("span", "", label), input);
   return wrapper;
+}
+
+function phaseLabel(phase) {
+  return {
+    waiting_for_user: tr("等待用户", "WAITING FOR USER"), evidence_ready: tr("证据就绪", "EVIDENCE READY"),
+    first_ballot: tr("第一轮投票", "FIRST BALLOT"), cross_review: tr("交叉复核", "CROSS REVIEW"),
+    completed: tr("已完成", "COMPLETED"), cancelled: tr("已取消", "CANCELLED"),
+  }[phase] || safeText(phase).toUpperCase();
+}
+
+function classificationLabel(value) {
+  return { public: tr("公开", "PUBLIC"), internal: tr("内部", "INTERNAL"), sensitive: tr("敏感", "SENSITIVE"), restricted: tr("受限", "RESTRICTED") }[value] || safeText(value).toUpperCase();
 }
 
 function element(tag, className = "", text = "") {

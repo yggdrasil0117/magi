@@ -14,6 +14,7 @@ const maxCommandBytes = 10_000;
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
   ["/workspace.mjs", ["workspace.mjs", "text/javascript; charset=utf-8"]],
+  ["/i18n.mjs", ["i18n.mjs", "text/javascript; charset=utf-8"]],
   ["/commands.mjs", ["commands.mjs", "text/javascript; charset=utf-8"]],
   ["/operations.mjs", ["operations.mjs", "text/javascript; charset=utf-8"]],
   ["/audit.mjs", ["audit.mjs", "text/javascript; charset=utf-8"]],

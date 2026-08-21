@@ -1,4 +1,5 @@
 import { safeText } from "./report.mjs";
+import { tr } from "./i18n.mjs";
 
 const HASH = /^[a-f0-9]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -57,8 +58,8 @@ export function evaluationRecordView(record, decisionId = record?.decision_id, v
     throw new Error("Invalid evaluation overall status.");
   }
   const metrics = [
-    scoreMetric("citation", "引用有效性", evaluation.citation_validity),
-    scoreMetric("persona", "人格差异度", evaluation.persona_differentiation),
+    scoreMetric("citation", tr("引用有效性", "Citation validity"), evaluation.citation_validity),
+    scoreMetric("persona", tr("人格差异度", "Persona differentiation"), evaluation.persona_differentiation),
     arbitrationMetric(evaluation.arbitration_consistency),
     latencyMetric(evaluation.latency),
     costMetric(evaluation.cost),
@@ -79,10 +80,10 @@ function scoreMetric(key, label, metric) {
   const score = optionalScore(metric.score);
   return {
     key, label, status, score,
-    value: score === null ? "未测量" : `${Math.round(score * 1000) / 10}%`,
+    value: score === null ? tr("未测量", "Not measured") : `${Math.round(score * 1000) / 10}%`,
     detail: key === "citation"
-      ? `${number(metric.valid_reference_count)} / ${number(metric.reference_count)} REFERENCES`
-      : `${number(metric.pair_count)} PAIRS · MIN ${formatScore(metric.minimum_pair_distance)}`,
+      ? `${number(metric.valid_reference_count)} / ${number(metric.reference_count)} ${tr("条引用", "REFERENCES")}`
+      : `${number(metric.pair_count)} ${tr("组配对", "PAIRS")} · ${tr("最小值", "MIN")} ${formatScore(metric.minimum_pair_distance)}`,
   };
 }
 
@@ -90,12 +91,12 @@ function arbitrationMetric(metric) {
   const status = metricStatus(metric);
   if (typeof metric.consistent !== "boolean") throw new Error("Invalid arbitration metric.");
   return {
-    key: "arbitration", label: "裁决一致性", status,
+    key: "arbitration", label: tr("裁决一致性", "Arbitration consistency"), status,
     score: metric.consistent ? 1 : 0,
-    value: metric.consistent ? "一致" : "发生漂移",
+    value: metric.consistent ? tr("一致", "Consistent") : tr("发生漂移", "Drift detected"),
     detail: metric.consistent
-      ? `RULE ${safeText(metric.rule_version)}`
-      : `MISMATCH ${cleanList(metric.mismatch_fields).join(" / ") || "UNKNOWN"}`,
+      ? `${tr("规则", "RULE")} ${safeText(metric.rule_version)}`
+      : `${tr("不匹配", "MISMATCH")} ${cleanList(metric.mismatch_fields).join(" / ") || tr("未知", "UNKNOWN")}`,
   };
 }
 
@@ -103,9 +104,9 @@ function latencyMetric(metric) {
   const status = metricStatus(metric);
   const p95 = optionalNonnegative(metric.p95_latency_ms);
   return {
-    key: "latency", label: "P95 延迟", status, score: null,
-    value: p95 === null ? "未测量" : `${p95} ms`,
-    detail: `${number(metric.sample_count)} SAMPLES · MEAN ${formatUnit(metric.mean_latency_ms, "ms")}`,
+    key: "latency", label: tr("P95 延迟", "P95 latency"), status, score: null,
+    value: p95 === null ? tr("未测量", "Not measured") : `${p95} ms`,
+    detail: `${number(metric.sample_count)} ${tr("个样本", "SAMPLES")} · ${tr("平均", "MEAN")} ${formatUnit(metric.mean_latency_ms, "ms")}`,
   };
 }
 
@@ -115,9 +116,9 @@ function costMetric(metric) {
   if (metric.pricing_digest !== null && metric.pricing_digest !== undefined
       && !HASH.test(metric.pricing_digest)) throw new Error("Invalid pricing digest.");
   return {
-    key: "cost", label: "模型成本", status, score: null,
-    value: cost === null ? "未测量" : `USD ${(cost / 1_000_000).toFixed(6)}`,
-    detail: `${number(metric.input_tokens)} IN / ${number(metric.output_tokens)} OUT TOKENS`,
+    key: "cost", label: tr("模型成本", "Model cost"), status, score: null,
+    value: cost === null ? tr("未测量", "Not measured") : `USD ${(cost / 1_000_000).toFixed(6)}`,
+    detail: `${number(metric.input_tokens)} ${tr("输入", "IN")} / ${number(metric.output_tokens)} ${tr("输出 Tokens", "OUT TOKENS")}`,
   };
 }
 
@@ -182,16 +183,16 @@ export function renderEvaluationHistory(root, history, { canRun = false } = {}) 
   root.replaceChildren();
   const heading = element("div", "evaluation-heading");
   heading.append(
-    element("span", "", "QUALITY EVALUATION / 07"),
+    element("span", "", tr("质量评估 / 07", "QUALITY EVALUATION / 07")),
     element("strong", `status-${history.latest?.overall || "empty"}`,
-      history.latest ? `${statusLabel(history.latest.overall)} · ${history.totalCount} RECORDS` : "NO RECORDS"),
+      history.latest ? `${statusLabel(history.latest.overall)} · ${history.totalCount} ${tr("条记录", "RECORDS")}` : tr("无记录", "NO RECORDS")),
     runButton(canRun),
   );
   root.append(heading);
   if (!history.latest) {
     root.append(element("p", "evaluation-empty", canRun
-      ? "当前版本尚无评估记录。可运行一次服务端权威评估。"
-      : "当前版本尚无评估记录；决策终态后才能运行评估。"));
+      ? tr("当前版本尚无评估记录。可运行一次服务端权威评估。", "This version has no evaluation record. You can run an authoritative server evaluation.")
+      : tr("当前版本尚无评估记录；决策终态后才能运行评估。", "This version has no evaluation record; evaluation is available after the decision reaches a terminal state.")));
     return;
   }
   root.append(renderTrend(history), renderMetricGrid(history.latest.metrics), renderEvaluationTimeline(history));
@@ -201,8 +202,8 @@ export function renderEvaluationUnavailable(root, message, { canRun = false } = 
   root.replaceChildren();
   const heading = element("div", "evaluation-heading");
   heading.append(
-    element("span", "", "QUALITY EVALUATION / 07"),
-    element("strong", "status-unavailable", "UNAVAILABLE"),
+    element("span", "", tr("质量评估 / 07", "QUALITY EVALUATION / 07")),
+    element("strong", "status-unavailable", tr("不可用", "UNAVAILABLE")),
     runButton(canRun),
   );
   root.append(heading, element("p", "evaluation-empty", safeText(message)));
@@ -210,12 +211,12 @@ export function renderEvaluationUnavailable(root, message, { canRun = false } = 
 
 function renderTrend(history) {
   const box = element("section", "evaluation-trend");
-  box.setAttribute("aria-label", "评估趋势窗口");
+  box.setAttribute("aria-label", tr("评估趋势窗口", "Evaluation trend window"));
   box.append(
-    trendCell("WINDOW", `${history.trend.sampleCount} / ${history.totalCount}`),
-    trendCell("PASS", history.trend.passCount),
-    trendCell("WARN", history.trend.warnCount),
-    trendCell("FAIL", history.trend.failCount),
+    trendCell(tr("窗口", "WINDOW"), `${history.trend.sampleCount} / ${history.totalCount}`),
+    trendCell(tr("通过", "PASS"), history.trend.passCount),
+    trendCell(tr("警告", "WARN"), history.trend.warnCount),
+    trendCell(tr("失败", "FAIL"), history.trend.failCount),
   );
   return box;
 }
@@ -244,7 +245,7 @@ function renderMetricGrid(metrics) {
 
 function renderEvaluationTimeline(history) {
   const details = element("details", "evaluation-history");
-  details.append(element("summary", "", `评估历史 · WINDOW ${history.records.length}`));
+  details.append(element("summary", "", `${tr("评估历史 · 窗口", "EVALUATION HISTORY · WINDOW")} ${history.records.length}`));
   const list = element("ol");
   [...history.records].reverse().forEach((record) => {
     const item = element("li", `status-${record.overall}`);
@@ -267,10 +268,10 @@ function trendCell(label, value) {
 }
 
 function runButton(enabled) {
-  const button = element("button", "evaluation-run", "运行服务端评估");
+  const button = element("button", "evaluation-run", tr("运行服务端评估", "Run server evaluation"));
   button.type = "button"; button.dataset.evaluationRun = "true";
   button.disabled = !enabled;
-  if (!enabled) button.title = "决策终态后才能运行评估";
+  if (!enabled) button.title = tr("决策终态后才能运行评估", "Evaluation is available after the decision reaches a terminal state");
   return button;
 }
 
@@ -308,7 +309,7 @@ function positiveInteger(value) { return Number.isInteger(value) && value >= 1; 
 function nonnegativeInteger(value) { return Number.isInteger(value) && value >= 0; }
 function formatScore(value) { const score = optionalScore(value); return score === null ? "N/M" : `${Math.round(score * 1000) / 10}%`; }
 function formatUnit(value, unit) { const parsed = optionalNonnegative(value); return parsed === null ? "N/M" : `${parsed} ${unit}`; }
-function statusLabel(status) { return { pass: "通过", warn: "警告", fail: "失败", not_measured: "未测量" }[status] || "未知"; }
+function statusLabel(status) { return { pass: tr("通过", "Pass"), warn: tr("警告", "Warning"), fail: tr("失败", "Fail"), not_measured: tr("未测量", "Not measured") }[status] || tr("未知", "Unknown"); }
 
 function apiError(payload, status, fallback) {
   const error = new Error(safeText(payload?.error?.message || `${fallback} (${status}).`));

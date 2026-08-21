@@ -51,6 +51,11 @@ headers. When `.env` supplies `MAGI_API_TOKEN`, the loopback proxy attaches it
 server-side and never exposes it to browser JavaScript. Without that setting, the
 workspace falls back to a single in-memory token prompt.
 
+The header language switch provides complete Chinese and English interface modes.
+The choice is kept locally in `localStorage` under `magi.language`; it contains no
+credential or decision content. Without a saved choice, the browser language is used.
+User questions, model output, and evidence are preserved in their original language.
+
 Authorized inbox, history, and revision comparison are implemented through dedicated
 principal-scoped API projections.
 
